@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color: #172126;
+    background: #f6f4ef;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background: #f6f4ef;
+    color: #172126;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .page-shell {
+    @apply mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-5 py-6;
+  }
+
+  .card {
+    @apply rounded-card border border-line bg-card shadow-card;
+  }
+
+  .section-label {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-muted;
+  }
+
+  .page-title {
+    @apply font-display text-4xl font-bold tracking-tight text-ink;
+  }
+
+  .primary-button {
+    @apply inline-flex h-14 items-center justify-center rounded-2xl bg-ink px-5 text-base font-bold text-mist transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .secondary-button {
+    @apply inline-flex h-14 items-center justify-center rounded-2xl border border-line bg-card px-5 text-base font-bold text-ink transition hover:bg-black/5;
+  }
+
+  .input {
+    @apply h-12 w-full rounded-2xl border border-line bg-card px-4 text-base text-ink outline-none transition focus:border-ink;
+  }
+}
