@@ -115,6 +115,13 @@ export function ActiveWorkoutPage() {
   const session = sessionQuery.data;
   const currentPerformance = session ? getCurrentPerformance(session) : null;
   const nextPerformance = session ? getNextPerformance(session) : null;
+  const currentTemplateExercise = useMemo(
+    () =>
+      session?.template.exercises.find(
+        (item) => item.exerciseId === currentPerformance?.exerciseId,
+      ) ?? null,
+    [currentPerformance?.exerciseId, session],
+  );
   const completedCount = useMemo(
     () =>
       session?.performances.filter((performance) => performance.completionStatus === "completed")
@@ -145,6 +152,8 @@ export function ActiveWorkoutPage() {
     );
   }
 
+  const activePerformance = currentPerformance;
+
   async function handleSave(setId: string, patch: Partial<LoggedSet>) {
     await updateSet.mutateAsync({
       setId,
@@ -153,7 +162,7 @@ export function ActiveWorkoutPage() {
   }
 
   async function handleCompleteExercise() {
-    const updatedSession = await completeCurrentExercise.mutateAsync(currentPerformance.id);
+    const updatedSession = await completeCurrentExercise.mutateAsync(activePerformance.id);
 
     if (updatedSession.status === "completed") {
       navigate(`/workout/${updatedSession.id}/complete`);
@@ -161,21 +170,14 @@ export function ActiveWorkoutPage() {
   }
 
   const targetText =
-    currentPerformance.exercise.loadMode === "bodyweight"
-      ? currentPerformance.recommendedSecondsValue != null
-        ? `${currentPerformance.recommendedSecondsValue}s`
-        : formatRange(
-            session.template.exercises.find(
-              (item) => item.exerciseId === currentPerformance.exerciseId,
-            )?.targetRepMin ?? null,
-            session.template.exercises.find(
-              (item) => item.exerciseId === currentPerformance.exerciseId,
-            )?.targetRepMax ?? null,
-          )
+    activePerformance.exercise.loadMode === "bodyweight"
+      ? activePerformance.recommendedSecondsValue != null
+        ? `${activePerformance.recommendedSecondsValue}s`
+        : formatRange(currentTemplateExercise?.targetRepMin ?? null, currentTemplateExercise?.targetRepMax ?? null)
       : formatLoad(
-          currentPerformance.recommendedLoadValue,
-          currentPerformance.exercise.unit,
-          currentPerformance.exercise.loadMode === "assistance",
+          activePerformance.recommendedLoadValue,
+          activePerformance.exercise.unit,
+          activePerformance.exercise.loadMode === "assistance",
         );
 
   return (
@@ -183,31 +185,22 @@ export function ActiveWorkoutPage() {
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="section-label">{session.template.name}</p>
-          <h1 className="page-title">{currentPerformance.exercise.name}</h1>
+          <h1 className="page-title">{activePerformance.exercise.name}</h1>
           <p className="text-sm text-muted">
-            {
-              session.template.exercises.find(
-                (item) => item.exerciseId === currentPerformance.exerciseId,
-              )?.targetSets
-            }{" "}
+            {currentTemplateExercise?.targetSets ?? 0}{" "}
             x{" "}
-            {(() => {
-              const templateExercise = session.template.exercises.find(
-                (item) => item.exerciseId === currentPerformance.exerciseId,
-              );
-
-              if (!templateExercise) {
-                return "";
-              }
-
-              return templateExercise.targetSecondsMin != null
+            {currentTemplateExercise
+              ? currentTemplateExercise.targetSecondsMin != null
                 ? formatRange(
-                    templateExercise.targetSecondsMin,
-                    templateExercise.targetSecondsMax,
+                    currentTemplateExercise.targetSecondsMin,
+                    currentTemplateExercise.targetSecondsMax,
                     "s",
                   )
-                : formatRange(templateExercise.targetRepMin, templateExercise.targetRepMax);
-            })()}
+                : formatRange(
+                    currentTemplateExercise.targetRepMin,
+                    currentTemplateExercise.targetRepMax,
+                  )
+              : ""}
           </p>
         </div>
         <span className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-mist">
@@ -224,13 +217,13 @@ export function ActiveWorkoutPage() {
           <div className="text-right">
             <p className="section-label">Last time</p>
             <p className="mt-1 text-lg font-semibold text-ink">
-              {currentPerformance.loggedSets
+              {activePerformance.loggedSets
                 .map((set) => set.reps ?? set.seconds ?? "—")
                 .join(" / ")}
             </p>
           </div>
         </div>
-        <p className="text-sm leading-6 text-muted">{currentPerformance.recommendationText}</p>
+        <p className="text-sm leading-6 text-muted">{activePerformance.recommendationText}</p>
       </section>
 
       <section className="card space-y-4 p-5">
@@ -239,13 +232,13 @@ export function ActiveWorkoutPage() {
           <span className="text-sm text-muted">changes save on blur</span>
         </div>
         <div className="space-y-3">
-          {currentPerformance.loggedSets.map((set) => (
+          {activePerformance.loggedSets.map((set) => (
             <SetRow
               key={set.id}
-              loadMode={currentPerformance.exercise.loadMode}
+              loadMode={activePerformance.exercise.loadMode}
               onSave={handleSave}
               set={set}
-              unit={currentPerformance.exercise.unit}
+              unit={activePerformance.exercise.unit}
             />
           ))}
         </div>
@@ -262,7 +255,7 @@ export function ActiveWorkoutPage() {
       <div className="mt-auto flex gap-3">
         <Link
           className="secondary-button h-[60px] w-[64px] px-0 text-2xl"
-          to={`/workout/${session.id}/help/${currentPerformance.exerciseId}`}
+          to={`/workout/${session.id}/help/${activePerformance.exerciseId}`}
         >
           ?
         </Link>
