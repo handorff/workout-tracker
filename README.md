@@ -45,7 +45,7 @@ Use Cloudflare Pages GitHub integration, not Direct Upload.
 Recommended Pages build settings:
 
 - Framework preset: `Vite`
-- Build command: `npm install && npm run build`
+- Build command: `npm run build`
 - Build output directory: `dist`
 - Root directory: `/`
 
@@ -54,7 +54,8 @@ Required Cloudflare Pages environment variables:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-SPA fallback is handled by `public/_redirects`.
+Do not add a separate deploy command like `npx wrangler deploy` for a standard Pages Git-integrated project.
+If Cloudflare auto-detects the app as a Vite static-assets Worker deploy, it already configures SPA fallback, so a `_redirects` file is redundant and can fail validation.
 
 ## Scripts
 
