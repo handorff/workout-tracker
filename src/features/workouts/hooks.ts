@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   completeExercise,
+  deleteWorkoutSession,
   fetchCompletedWorkouts,
   fetchExercise,
   fetchExerciseDetail,
@@ -50,6 +51,23 @@ export function useCompletedWorkouts(userId: string) {
   return useQuery({
     queryKey: ["history", userId],
     queryFn: () => fetchCompletedWorkouts(userId),
+  });
+}
+
+export function useDeleteWorkoutSession(userId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sessionId: string) => deleteWorkoutSession(sessionId, userId),
+    onSuccess: (_data, sessionId) => {
+      queryClient.invalidateQueries({ queryKey: ["history", userId] });
+      queryClient.invalidateQueries({ queryKey: ["today", userId] });
+      queryClient.invalidateQueries({ queryKey: ["exercise-detail", userId] });
+      queryClient.removeQueries({
+        queryKey: ["session", userId, sessionId],
+        exact: true,
+      });
+    },
   });
 }
 

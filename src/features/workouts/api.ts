@@ -412,6 +412,18 @@ export async function fetchCompletedWorkouts(userId: string, limit = 20) {
   return (data as RawSession[]).map(mapSession);
 }
 
+export async function deleteWorkoutSession(sessionId: string, userId: string) {
+  const { error } = await supabase
+    .from("workout_sessions")
+    .delete()
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function fetchTodayData(userId: string): Promise<TodayData> {
   const [inProgressSession, templates, completedSessions] = await Promise.all([
     fetchInProgressWorkout(userId),
