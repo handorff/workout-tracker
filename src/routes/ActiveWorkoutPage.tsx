@@ -176,17 +176,14 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
   }
 
   return (
-    <div className="rounded-2xl bg-black/[0.03] p-4">
-      <div className="flex items-center gap-3">
-        <div
-          className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-            set.setNumber === 3 ? "bg-accent text-mist" : "bg-ink text-mist"
-          }`}
-        >
-          {set.setNumber}
-        </div>
+    <div
+      className={`rounded-2xl p-4 transition ${
+        completed ? "bg-success/10" : "bg-black/[0.03]"
+      }`}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_64px_20px] items-center gap-3">
         {loadMode !== "bodyweight" && (
-          <div className="flex-1">
+          <div className="min-w-0">
             <label className="section-label">Load</label>
             <div className="mt-1 flex h-10 items-center rounded-xl border border-line bg-card">
               <input
@@ -204,7 +201,7 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           </div>
         )}
         {set.reps != null && (
-          <div className="flex-1">
+          <div className="min-w-0">
             <label className="section-label">Reps</label>
             <input
               className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
@@ -217,7 +214,7 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           </div>
         )}
         {set.seconds != null && (
-          <div className="flex-1">
+          <div className="min-w-0">
             <label className="section-label">Seconds</label>
             <input
               className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
@@ -230,12 +227,14 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           </div>
         )}
         <button
-          className={`mt-5 h-5 w-5 rounded-full border-2 ${
+          className={`mt-5 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[13px] font-bold leading-none ${
             completed ? "border-success bg-success" : "border-accent"
           }`}
           onClick={handleToggleCompleted}
           type="button"
-        />
+        >
+          {completed ? "✓" : ""}
+        </button>
       </div>
     </div>
   );
