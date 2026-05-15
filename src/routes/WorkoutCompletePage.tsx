@@ -1,9 +1,8 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { formatDurationMinutes } from "../lib/format";
+import { formatDurationMinutes, summarizeSet } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
 import { useWorkoutSession } from "../features/workouts/hooks";
-import { getNextWorkoutName } from "../features/workouts/logic";
 import { StatusView } from "../components/StatusView";
 
 export function WorkoutCompletePage() {
@@ -31,16 +30,14 @@ export function WorkoutCompletePage() {
   }
 
   const session = sessionQuery.data;
-  const nextWorkoutName = getNextWorkoutName(session.template.name);
 
   return (
     <main className="page-shell gap-4">
       <header className="space-y-2">
         <h1 className="page-title">Workout Saved</h1>
-        <p className="text-sm leading-6 text-muted">{session.template.name} is complete.</p>
       </header>
 
-      <section className="card space-y-4 p-5">
+      <section className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="section-label">Summary</p>
@@ -57,28 +54,33 @@ export function WorkoutCompletePage() {
             {formatDurationMinutes(session.startedAt, session.completedAt) ?? "Done"}
           </span>
         </div>
-        <p className="text-sm leading-6 text-ink">
-          {
-            session.performances.find((performance) =>
-              performance.recommendationText.toLowerCase().includes("increase"),
-            )?.recommendationText ?? "Workout saved successfully."
-          }
-        </p>
+        <div className="space-y-3">
+          {session.performances
+            .sort((a, b) => a.exerciseOrder - b.exerciseOrder)
+            .map((performance) => {
+              const isAssistance = performance.exercise.loadMode === "assistance";
+              const setSummary = performance.loggedSets
+                .sort((a, b) => a.setNumber - b.setNumber)
+                .map((set) => summarizeSet(set, performance.exercise.unit, isAssistance))
+                .filter(Boolean)
+                .join(" / ");
+
+              return (
+                <div key={performance.id}>
+                  <p className="text-sm font-semibold leading-5 text-ink">
+                    {performance.exercise.name}
+                  </p>
+                  {setSummary && (
+                    <p className="text-sm leading-6 text-muted">{setSummary}</p>
+                  )}
+                </div>
+              );
+            })}
+        </div>
       </section>
 
-      <section className="card space-y-3 p-5">
-        <p className="section-label">Next workout</p>
-        <p className="font-display text-4xl font-bold text-ink">{nextWorkoutName}</p>
-        <p className="text-sm leading-6 text-muted">
-          The rotation advances automatically after {session.template.name}.
-        </p>
-      </section>
-
-      <div className="mt-auto flex gap-3">
-        <Link className="secondary-button flex-1" to="/history">
-          Review Session
-        </Link>
-        <button className="primary-button flex-1" onClick={() => navigate("/today")}>
+      <div className="mt-auto">
+        <button className="primary-button w-full" onClick={() => navigate("/today")}>
           Done
         </button>
       </div>

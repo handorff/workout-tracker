@@ -197,8 +197,8 @@ export function buildInitialLoggedSet(
   return {
     setNumber,
     loadValue:
-      previousSet?.loadValue ??
       recommendation.recommendedLoadValue ??
+      previousSet?.loadValue ??
       templateExercise.startingLoadValue,
     reps:
       previousSet?.reps ??
@@ -208,7 +208,7 @@ export function buildInitialLoggedSet(
       previousSet?.seconds ??
       recommendation.recommendedSecondsValue ??
       templateExercise.targetSecondsMin,
-    completed: previousSet?.completed ?? false,
+    completed: false,
   };
 }
 

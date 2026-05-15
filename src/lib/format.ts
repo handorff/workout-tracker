@@ -86,6 +86,5 @@ export function summarizePerformance(performance: ExercisePerformance) {
 export function summarizeSession(session: WorkoutSession) {
   return session.performances
     .sort((a, b) => a.exerciseOrder - b.exerciseOrder)
-    .map(summarizePerformance)
-    .slice(0, 3);
+    .map(summarizePerformance);
 }

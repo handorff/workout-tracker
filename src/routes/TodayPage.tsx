@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 
-import { formatRange } from "../lib/format";
+import { formatLoad, formatRange } from "../lib/format";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../features/auth/auth-context";
 import { useStartWorkout, useTodayData } from "../features/workouts/hooks";
@@ -31,8 +31,18 @@ export function TodayPage() {
     );
   }
 
-  const { inProgressSession, nextTemplate, lastCompletedWorkoutName } = todayQuery.data;
+  const { inProgressSession, nextTemplate, exerciseRecommendations } = todayQuery.data;
   const exercises = sortTemplateExercises(nextTemplate);
+  const activeRecommendations = new Map(
+    inProgressSession?.performances.map((performance) => [
+      performance.exerciseId,
+      {
+        recommendedLoadValue: performance.recommendedLoadValue,
+        recommendedSecondsValue: performance.recommendedSecondsValue,
+        recommendationText: performance.recommendationText,
+      },
+    ]),
+  );
 
   async function handleStart() {
     const session = await startWorkout.mutateAsync();
@@ -45,13 +55,10 @@ export function TodayPage() {
   }
 
   return (
-    <main className="page-shell gap-4">
+    <main className="page-shell gap-4 pb-28">
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <h1 className="page-title">Today</h1>
-          <p className="max-w-[250px] text-sm leading-6 text-muted">
-            See the workout, then start logging.
-          </p>
         </div>
         <div className="flex gap-2">
           <Link className="secondary-button h-11 px-4 text-sm" to="/history">
@@ -77,15 +84,8 @@ export function TodayPage() {
             {inProgressSession?.template.exercises.length ?? exercises.length} exercises
           </span>
         </div>
-        <p className="text-sm leading-6 text-muted">
-          {inProgressSession
-            ? "An in-progress workout is ready to resume."
-            : lastCompletedWorkoutName
-              ? `Last completed workout was ${lastCompletedWorkoutName}.`
-              : "No completed workouts yet. Start with Workout A."}
-        </p>
         {(inProgressSession?.template.warmupNotes ?? nextTemplate.warmupNotes) && (
-          <div className="rounded-2xl bg-black/[0.03] p-4">
+          <div>
             <p className="section-label">Warm-up</p>
             <p className="mt-2 text-sm leading-6 text-ink">
               {inProgressSession?.template.warmupNotes ?? nextTemplate.warmupNotes}
@@ -97,41 +97,62 @@ export function TodayPage() {
       <section className="card space-y-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-2xl font-bold text-ink">Exercises</h2>
-          <span className="text-sm text-muted">
-            {inProgressSession ? "resume where you left off" : "in order"}
-          </span>
         </div>
         <div className="space-y-3">
           {(inProgressSession?.template.exercises ?? exercises).map((item) => (
-            <Link
-              key={item.id}
-              className="flex items-center justify-between rounded-2xl bg-black/[0.03] px-4 py-4 transition hover:bg-black/[0.05]"
-              to={`/exercises/${item.exerciseId}`}
-            >
-              <div className="space-y-1">
-                <p className="text-lg font-semibold text-ink">{item.exercise.name}</p>
-                <p className="text-sm text-muted">
-                  {item.targetSets} x{" "}
-                  {item.targetSecondsMin != null
-                    ? formatRange(item.targetSecondsMin, item.targetSecondsMax, "s")
-                    : formatRange(item.targetRepMin, item.targetRepMax)}
-                  {item.exercise.loadMode === "bodyweight" &&
-                  item.targetSecondsMin == null &&
-                  item.targetRepMin != null
-                    ? "/side"
-                    : ""}
-                </p>
-              </div>
-              <span className="text-sm text-muted">
-                {item.exercise.loadMode === "assistance" ? "assisted" : item.exercise.equipment}
-              </span>
-            </Link>
+            (() => {
+              const recommendation =
+                activeRecommendations.get(item.exerciseId) ??
+                exerciseRecommendations[item.exerciseId];
+              const suggestedLoad =
+                item.exercise.loadMode !== "bodyweight" &&
+                recommendation?.recommendedLoadValue != null
+                  ? formatLoad(
+                      recommendation.recommendedLoadValue,
+                      item.exercise.unit,
+                      item.exercise.loadMode === "assistance",
+                    )
+                  : null;
+
+              return (
+                <Link
+                  key={item.id}
+                  className="flex items-start justify-between gap-4 transition hover:text-success"
+                  to={`/exercises/${item.exerciseId}`}
+                >
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-ink">{item.exercise.name}</p>
+                    <p className="text-sm text-muted">
+                      {item.targetSets} x{" "}
+                      {item.targetSecondsMin != null
+                        ? formatRange(item.targetSecondsMin, item.targetSecondsMax, "s")
+                        : formatRange(item.targetRepMin, item.targetRepMax)}
+                      {item.exercise.loadMode === "bodyweight" &&
+                      item.targetSecondsMin == null &&
+                      item.targetRepMin != null
+                        ? "/side"
+                        : ""}
+                    </p>
+                    {suggestedLoad && (
+                      <p className="text-sm font-semibold text-success">
+                        Suggested: {suggestedLoad}
+                      </p>
+                    )}
+                  </div>
+                  <span className="pt-1 text-right text-sm text-muted">
+                    {item.exercise.loadMode === "assistance"
+                      ? "assisted"
+                      : item.exercise.equipment}
+                  </span>
+                </Link>
+              );
+            })()
           ))}
         </div>
       </section>
 
       <button
-        className="primary-button mt-auto w-full"
+        className="primary-button fixed bottom-6 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-[390px] -translate-x-1/2 shadow-card"
         disabled={startWorkout.isPending}
         onClick={handleStart}
       >

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent, TouchEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { formatLoad, formatRange } from "../lib/format";
+import { formatLoad, formatRange, summarizeSet } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
 import {
   useCompleteExercise,
@@ -16,19 +17,163 @@ interface SetRowProps {
   set: LoggedSet;
   unit: string;
   loadMode: "weight" | "assistance" | "bodyweight";
+  defaultLoadValue: number | null;
+  loadStep: number;
   onSave: (setId: string, patch: Partial<LoggedSet>) => void;
 }
 
-function SetRow({ set, unit, loadMode, onSave }: SetRowProps) {
-  const [load, setLoad] = useState(set.loadValue?.toString() ?? "");
+type AdjustableField = "load" | "reps" | "seconds";
+
+interface DragState {
+  field: AdjustableField;
+  startValue: number;
+  startY: number;
+  step: number;
+  value: number;
+}
+
+const pixelsPerDragStep = 14;
+
+function formatDraggedNumber(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
+function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: SetRowProps) {
+  const initialLoadValue = defaultLoadValue ?? set.loadValue;
+  const [load, setLoad] = useState(initialLoadValue?.toString() ?? "");
   const [reps, setReps] = useState(set.reps?.toString() ?? "");
   const [seconds, setSeconds] = useState(set.seconds?.toString() ?? "");
+  const [completed, setCompleted] = useState(set.completed);
+  const dragState = useRef<DragState | null>(null);
 
   useEffect(() => {
-    setLoad(set.loadValue?.toString() ?? "");
+    setLoad(initialLoadValue?.toString() ?? "");
     setReps(set.reps?.toString() ?? "");
     setSeconds(set.seconds?.toString() ?? "");
-  }, [set.id, set.loadValue, set.reps, set.seconds]);
+    setCompleted(set.completed);
+  }, [initialLoadValue, set.completed, set.id, set.reps, set.seconds]);
+
+  function handleToggleCompleted() {
+    const nextCompleted = !completed;
+    setCompleted(nextCompleted);
+
+    onSave(set.id, {
+      completed: nextCompleted,
+      loadValue: loadMode === "bodyweight" || load === "" ? null : Number(load),
+      reps: reps === "" ? null : Number(reps),
+      seconds: seconds === "" ? null : Number(seconds),
+    });
+  }
+
+  function getFieldValue(field: AdjustableField) {
+    const value = field === "load" ? load : field === "reps" ? reps : seconds;
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function setFieldValue(field: AdjustableField, value: number) {
+    const formattedValue = formatDraggedNumber(value);
+
+    if (field === "load") {
+      setLoad(formattedValue);
+    } else if (field === "reps") {
+      setReps(formattedValue);
+    } else {
+      setSeconds(formattedValue);
+    }
+  }
+
+  function beginDrag(field: AdjustableField, step: number, startY: number) {
+    const startValue = getFieldValue(field);
+    dragState.current = {
+      field,
+      startValue,
+      startY,
+      step,
+      value: startValue,
+    };
+  }
+
+  function updateDrag(clientY: number) {
+    const currentDragState = dragState.current;
+
+    if (!currentDragState) {
+      return;
+    }
+
+    const stepDelta = Math.trunc((currentDragState.startY - clientY) / pixelsPerDragStep);
+    const nextValue = Math.max(0, currentDragState.startValue + stepDelta * currentDragState.step);
+
+    if (nextValue !== currentDragState.value) {
+      currentDragState.value = nextValue;
+      setFieldValue(currentDragState.field, nextValue);
+    }
+  }
+
+  function commitDrag() {
+    dragState.current = null;
+  }
+
+  function handleMouseDragStart(
+    field: AdjustableField,
+    step: number,
+    event: MouseEvent<HTMLInputElement>,
+  ) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    beginDrag(field, step, event.clientY);
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      moveEvent.preventDefault();
+      updateDrag(moveEvent.clientY);
+    };
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      commitDrag();
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }
+
+  function handleTouchDragStart(
+    field: AdjustableField,
+    step: number,
+    event: TouchEvent<HTMLInputElement>,
+  ) {
+    const touch = event.touches[0];
+
+    if (!touch) {
+      return;
+    }
+
+    beginDrag(field, step, touch.clientY);
+
+    const handleTouchMove = (moveEvent: globalThis.TouchEvent) => {
+      const nextTouch = moveEvent.touches[0];
+
+      if (!nextTouch) {
+        return;
+      }
+
+      moveEvent.preventDefault();
+      updateDrag(nextTouch.clientY);
+    };
+    const handleTouchEnd = () => {
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchEnd);
+      commitDrag();
+    };
+
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd);
+    document.addEventListener("touchcancel", handleTouchEnd);
+  }
 
   return (
     <div className="rounded-2xl bg-black/[0.03] p-4">
@@ -43,32 +188,31 @@ function SetRow({ set, unit, loadMode, onSave }: SetRowProps) {
         {loadMode !== "bodyweight" && (
           <div className="flex-1">
             <label className="section-label">Load</label>
-            <input
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-card px-3"
-              inputMode="decimal"
-              value={load}
-              onBlur={() =>
-                onSave(set.id, {
-                  loadValue: load === "" ? null : Number(load),
-                })
-              }
-              onChange={(event) => setLoad(event.target.value)}
-            />
+            <div className="mt-1 flex h-10 items-center rounded-xl border border-line bg-card">
+              <input
+                className="h-full min-w-0 flex-1 touch-none rounded-xl bg-transparent px-3 outline-none cursor-ns-resize"
+                inputMode="decimal"
+                value={load}
+                onChange={(event) => setLoad(event.target.value)}
+                onMouseDown={(event) => handleMouseDragStart("load", loadStep, event)}
+                onTouchStart={(event) => handleTouchDragStart("load", loadStep, event)}
+              />
+              <span className="pr-3 text-sm font-semibold text-muted">
+                {loadMode === "assistance" ? "assist" : unit}
+              </span>
+            </div>
           </div>
         )}
         {set.reps != null && (
           <div className="flex-1">
             <label className="section-label">Reps</label>
             <input
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-card px-3"
+              className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
               inputMode="numeric"
               value={reps}
-              onBlur={() =>
-                onSave(set.id, {
-                  reps: reps === "" ? null : Number(reps),
-                })
-              }
               onChange={(event) => setReps(event.target.value)}
+              onMouseDown={(event) => handleMouseDragStart("reps", 1, event)}
+              onTouchStart={(event) => handleTouchDragStart("reps", 1, event)}
             />
           </div>
         )}
@@ -76,29 +220,23 @@ function SetRow({ set, unit, loadMode, onSave }: SetRowProps) {
           <div className="flex-1">
             <label className="section-label">Seconds</label>
             <input
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-card px-3"
+              className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
               inputMode="numeric"
               value={seconds}
-              onBlur={() =>
-                onSave(set.id, {
-                  seconds: seconds === "" ? null : Number(seconds),
-                })
-              }
               onChange={(event) => setSeconds(event.target.value)}
+              onMouseDown={(event) => handleMouseDragStart("seconds", 5, event)}
+              onTouchStart={(event) => handleTouchDragStart("seconds", 5, event)}
             />
           </div>
         )}
         <button
           className={`mt-5 h-5 w-5 rounded-full border-2 ${
-            set.completed ? "border-success bg-success" : "border-accent"
+            completed ? "border-success bg-success" : "border-accent"
           }`}
-          onClick={() => onSave(set.id, { completed: !set.completed })}
+          onClick={handleToggleCompleted}
           type="button"
         />
       </div>
-      <p className="mt-3 text-xs text-muted">
-        {loadMode === "assistance" ? "Assistance" : unit}
-      </p>
     </div>
   );
 }
@@ -179,62 +317,71 @@ export function ActiveWorkoutPage() {
           activePerformance.exercise.unit,
           activePerformance.exercise.loadMode === "assistance",
         );
+  const targetRangeText = currentTemplateExercise
+    ? currentTemplateExercise.targetSecondsMin != null
+      ? formatRange(
+          currentTemplateExercise.targetSecondsMin,
+          currentTemplateExercise.targetSecondsMax,
+          "s",
+        )
+      : formatRange(currentTemplateExercise.targetRepMin, currentTemplateExercise.targetRepMax)
+    : "";
+  const targetPrescriptionText = `${currentTemplateExercise?.targetSets ?? 0} sets of ${targetRangeText}`;
 
   return (
     <main className="page-shell gap-4">
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="section-label">{session.template.name}</p>
           <h1 className="page-title">{activePerformance.exercise.name}</h1>
-          <p className="text-sm text-muted">
-            {currentTemplateExercise?.targetSets ?? 0}{" "}
-            x{" "}
-            {currentTemplateExercise
-              ? currentTemplateExercise.targetSecondsMin != null
-                ? formatRange(
-                    currentTemplateExercise.targetSecondsMin,
-                    currentTemplateExercise.targetSecondsMax,
-                    "s",
-                  )
-                : formatRange(
-                    currentTemplateExercise.targetRepMin,
-                    currentTemplateExercise.targetRepMax,
-                  )
-              : ""}
-          </p>
         </div>
         <span className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-mist">
           {completedCount + 1}/{session.performances.length}
         </span>
       </header>
 
-      <section className="card space-y-4 p-5">
-        <div className="flex items-start justify-between gap-3">
+      <section className="space-y-4">
+        <div className="space-y-4">
           <div>
             <p className="section-label">Target</p>
-            <p className="mt-1 text-4xl font-bold text-ink">{targetText}</p>
+            <div className="mt-1 flex items-baseline justify-between gap-4">
+              <p className="text-4xl font-bold text-ink">{targetText}</p>
+              <p className="text-right text-sm font-semibold text-muted">
+                {targetPrescriptionText}
+              </p>
+            </div>
           </div>
-          <div className="text-right">
+          <div>
             <p className="section-label">Last time</p>
-            <p className="mt-1 text-lg font-semibold text-ink">
+            <p className="mt-1 text-sm font-semibold leading-6 text-ink">
               {activePerformance.loggedSets
-                .map((set) => set.reps ?? set.seconds ?? "—")
+                .map((set) =>
+                  summarizeSet(
+                    set,
+                    activePerformance.exercise.unit,
+                    activePerformance.exercise.loadMode === "assistance",
+                  ),
+                )
+                .filter(Boolean)
                 .join(" / ")}
             </p>
           </div>
         </div>
-        <p className="text-sm leading-6 text-muted">{activePerformance.recommendationText}</p>
       </section>
 
-      <section className="card space-y-4 p-5">
+      <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-2xl font-bold text-ink">Log sets</h2>
-          <span className="text-sm text-muted">changes save on blur</span>
         </div>
         <div className="space-y-3">
           {activePerformance.loggedSets.map((set) => (
             <SetRow
               key={set.id}
+              defaultLoadValue={activePerformance.recommendedLoadValue}
+              loadStep={
+                currentTemplateExercise?.progressionIncrement ??
+                activePerformance.exercise.defaultIncrement ??
+                5
+              }
               loadMode={activePerformance.exercise.loadMode}
               onSave={handleSave}
               set={set}
@@ -245,10 +392,10 @@ export function ActiveWorkoutPage() {
       </section>
 
       {nextPerformance && (
-        <section className="card space-y-2 p-5">
-          <p className="font-display text-2xl font-bold text-ink">Up next</p>
-          <p className="text-lg font-semibold text-ink">{nextPerformance.exercise.name}</p>
-          <p className="text-sm text-muted">{nextPerformance.recommendationText}</p>
+        <section>
+          <p className="text-lg font-semibold text-ink">
+            <span className="text-muted">Up next:</span> {nextPerformance.exercise.name}
+          </p>
         </section>
       )}
 

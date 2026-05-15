@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ExercisePerformance, WorkoutTemplateExercise } from "../../types/domain";
-import { getNextWorkoutName, getRecommendation } from "./logic";
+import { buildInitialLoggedSet, getNextWorkoutName, getRecommendation } from "./logic";
 
 function buildTemplateExercise(
   overrides: Partial<WorkoutTemplateExercise> = {},
@@ -115,5 +115,31 @@ describe("getRecommendation", () => {
     const recommendation = getRecommendation(templateExercise, buildPerformance([8, 8, 8], 55));
 
     expect(recommendation.recommendedLoadValue).toBe(50);
+  });
+});
+
+describe("buildInitialLoggedSet", () => {
+  it("defaults load to the recommendation instead of the previous set", () => {
+    const initial = buildInitialLoggedSet(
+      buildTemplateExercise(),
+      {
+        recommendedLoadValue: 130,
+        recommendedSecondsValue: null,
+        recommendationText: "",
+      },
+      {
+        id: "set-1",
+        exercisePerformanceId: "performance-1",
+        setNumber: 1,
+        loadValue: 120,
+        reps: 5,
+        seconds: null,
+        completed: true,
+      },
+      1,
+    );
+
+    expect(initial.loadValue).toBe(130);
+    expect(initial.completed).toBe(false);
   });
 });

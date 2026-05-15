@@ -96,6 +96,14 @@ interface TodayData {
   inProgressSession: WorkoutSession | null;
   nextTemplate: WorkoutTemplate;
   lastCompletedWorkoutName: string | null;
+  exerciseRecommendations: Record<
+    string,
+    {
+      recommendedLoadValue: number | null;
+      recommendedSecondsValue: number | null;
+      recommendationText: string;
+    }
+  >;
 }
 
 interface ExerciseDetailData {
@@ -428,7 +436,7 @@ export async function fetchTodayData(userId: string): Promise<TodayData> {
   const [inProgressSession, templates, completedSessions] = await Promise.all([
     fetchInProgressWorkout(userId),
     fetchTemplates(),
-    fetchCompletedWorkouts(userId, 1),
+    fetchCompletedWorkouts(userId, 30),
   ]);
 
   const lastCompletedWorkoutName = completedSessions[0]?.template.name ?? null;
@@ -437,11 +445,31 @@ export async function fetchTodayData(userId: string): Promise<TodayData> {
     templates.find((template) => template.name === nextWorkoutName),
     "Next workout template missing from seed data",
   );
+  const latestByExerciseId = new Map<string, ExercisePerformance>();
+
+  for (const session of completedSessions) {
+    for (const performance of session.performances) {
+      if (!latestByExerciseId.has(performance.exerciseId)) {
+        latestByExerciseId.set(performance.exerciseId, performance);
+      }
+    }
+  }
+
+  const exerciseRecommendations = Object.fromEntries(
+    sortTemplateExercises(nextTemplate).map((templateExercise) => [
+      templateExercise.exerciseId,
+      getRecommendation(
+        templateExercise,
+        latestByExerciseId.get(templateExercise.exerciseId) ?? null,
+      ),
+    ]),
+  );
 
   return {
     inProgressSession,
     nextTemplate,
     lastCompletedWorkoutName,
+    exerciseRecommendations,
   };
 }
 
@@ -559,15 +587,25 @@ export async function updateLoggedSet(
   setId: string,
   values: Partial<Pick<LoggedSet, "loadValue" | "reps" | "seconds" | "completed">>,
 ) {
-  const { error } = await supabase
-    .from("logged_sets")
-    .update({
-      load_value: values.loadValue,
-      reps: values.reps,
-      seconds: values.seconds,
-      completed: values.completed,
-    })
-    .eq("id", setId);
+  const updatePayload: Record<string, number | boolean | null> = {};
+
+  if ("loadValue" in values) {
+    updatePayload.load_value = values.loadValue ?? null;
+  }
+
+  if ("reps" in values) {
+    updatePayload.reps = values.reps ?? null;
+  }
+
+  if ("seconds" in values) {
+    updatePayload.seconds = values.seconds ?? null;
+  }
+
+  if ("completed" in values) {
+    updatePayload.completed = values.completed ?? false;
+  }
+
+  const { error } = await supabase.from("logged_sets").update(updatePayload).eq("id", setId);
 
   if (error) {
     throw error;

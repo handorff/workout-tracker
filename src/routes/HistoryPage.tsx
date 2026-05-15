@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { summarizeSession, formatDurationMinutes, formatWorkoutDate } from "../lib/format";
+import { summarizeSet, formatDurationMinutes, formatWorkoutDate } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
 import {
   useCompletedWorkouts,
@@ -61,7 +61,6 @@ export function HistoryPage() {
             Today
           </Link>
         </div>
-        <p className="text-sm leading-6 text-muted">Past workouts, newest first.</p>
       </header>
 
       {deleteError ? (
@@ -89,16 +88,13 @@ export function HistoryPage() {
           <section key={session.id} className="card space-y-4 p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <h2 className="text-2xl font-bold text-ink">{session.template.name}</h2>
-                <p className="text-sm text-muted">
+                <h2 className="text-2xl font-bold text-ink">
                   {formatWorkoutDate(session.completedAt)} •{" "}
                   {formatDurationMinutes(session.startedAt, session.completedAt) ?? "In progress"}
-                </p>
+                </h2>
+                <p className="text-sm text-muted">{session.template.name}</p>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <span className="rounded-full bg-black/[0.03] px-3 py-2 text-xs font-semibold text-ink">
-                  Completed
-                </span>
                 <button
                   className="text-sm font-semibold text-muted underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={deleteWorkout.isPending && removingSessionId === session.id}
@@ -111,26 +107,36 @@ export function HistoryPage() {
                 </button>
               </div>
             </div>
-            <div className="space-y-2">
-              {summarizeSession(session).map((line) => {
-                const matchingPerformance = session.performances.find((performance) =>
-                  line.startsWith(performance.exercise.name),
-                );
+            <div className="space-y-3">
+              {session.performances
+                .sort((a, b) => a.exerciseOrder - b.exerciseOrder)
+                .map((performance) => {
+                  const isAssistance = performance.exercise.loadMode === "assistance";
+                  const setSummary = performance.loggedSets
+                    .sort((a, b) => a.setNumber - b.setNumber)
+                    .map((set) =>
+                      summarizeSet(set, performance.exercise.unit, isAssistance),
+                    )
+                    .filter(Boolean)
+                    .join(" / ");
 
-                return (
-                  <Link
-                    key={line}
-                    className="block text-sm leading-6 text-ink underline-offset-4 hover:underline"
-                    to={
-                      matchingPerformance
-                        ? `/exercises/${matchingPerformance.exerciseId}`
-                        : "/history"
-                    }
-                  >
-                    {line}
-                  </Link>
-                );
-              })}
+                  return (
+                    <Link
+                      key={performance.id}
+                      className="block underline-offset-4 hover:underline"
+                      to={`/exercises/${performance.exerciseId}`}
+                    >
+                      <span className="block text-sm font-semibold leading-5 text-ink">
+                        {performance.exercise.name}
+                      </span>
+                      {setSummary && (
+                        <span className="block text-sm leading-6 text-muted">
+                          {setSummary}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
             </div>
           </section>
         ))}
