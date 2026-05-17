@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 
-import { formatLoad, formatWorkoutDate } from "../lib/format";
+import { formatLoad, formatWorkoutDate, summarizeSet } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
 import { useExerciseDetail } from "../features/workouts/hooks";
 import { StatusView } from "../components/StatusView";
@@ -33,7 +33,6 @@ export function ExerciseDetailPage() {
     recentPerformances,
     currentRecommendationLoad,
     currentRecommendationSeconds,
-    currentRecommendationText,
   } = detailQuery.data;
   const recommendationValue =
     currentRecommendationLoad != null
@@ -70,28 +69,32 @@ export function ExerciseDetailPage() {
             {exercise.loadMode}
           </span>
         </div>
-        <p className="text-sm leading-6 text-muted">{currentRecommendationText}</p>
       </section>
 
       <section className="card space-y-4 p-5">
         <h2 className="font-display text-2xl font-bold text-ink">Recent performances</h2>
         <div className="space-y-3">
-          {recentPerformances.map(({ session, performance }) => (
-            <div
-              key={`${session.id}-${performance.id}`}
-              className="flex items-center justify-between gap-4 border-t border-line pt-3 first:border-0 first:pt-0"
-            >
-              <div>
-                <p className="text-sm font-medium text-ink">{formatWorkoutDate(session.completedAt)}</p>
-                <p className="text-xs text-muted">{session.template.name}</p>
+          {recentPerformances.map(({ session, performance }) => {
+            const isAssistance = performance.exercise.loadMode === "assistance";
+            const setSummary = performance.loggedSets
+              .slice()
+              .sort((a, b) => a.setNumber - b.setNumber)
+              .map((set) => summarizeSet(set, performance.exercise.unit, isAssistance))
+              .filter(Boolean)
+              .join(" / ");
+
+            return (
+              <div
+                key={`${session.id}-${performance.id}`}
+                className="flex items-center justify-between gap-4 border-t border-line pt-3 first:border-0 first:pt-0"
+              >
+                <p className="text-sm font-medium text-ink">
+                  {formatWorkoutDate(session.completedAt)}
+                </p>
+                <p className="text-right text-sm font-semibold text-ink">{setSummary}</p>
               </div>
-              <p className="text-sm font-semibold text-ink">
-                {performance.loggedSets
-                  .map((set) => set.reps ?? set.seconds ?? "—")
-                  .join(" / ")}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </main>

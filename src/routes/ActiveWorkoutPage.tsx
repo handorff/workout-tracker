@@ -6,6 +6,7 @@ import { formatLoad, formatRange, summarizeSet } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
 import {
   useCompleteExercise,
+  useCompletedWorkouts,
   useUpdateLoggedSet,
   useWorkoutSession,
 } from "../features/workouts/hooks";
@@ -39,7 +40,7 @@ function formatDraggedNumber(value: number) {
 }
 
 function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: SetRowProps) {
-  const initialLoadValue = defaultLoadValue ?? set.loadValue;
+  const initialLoadValue = set.loadValue ?? defaultLoadValue;
   const [load, setLoad] = useState(initialLoadValue?.toString() ?? "");
   const [reps, setReps] = useState(set.reps?.toString() ?? "");
   const [seconds, setSeconds] = useState(set.seconds?.toString() ?? "");
@@ -120,6 +121,10 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
     step: number,
     event: MouseEvent<HTMLInputElement>,
   ) {
+    if (completed) {
+      return;
+    }
+
     if (event.button !== 0) {
       return;
     }
@@ -145,6 +150,10 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
     step: number,
     event: TouchEvent<HTMLInputElement>,
   ) {
+    if (completed) {
+      return;
+    }
+
     const touch = event.touches[0];
 
     if (!touch) {
@@ -187,7 +196,10 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
             <label className="section-label">Load</label>
             <div className="mt-1 flex h-10 items-center rounded-xl border border-line bg-card">
               <input
-                className="h-full min-w-0 flex-1 touch-none rounded-xl bg-transparent px-3 outline-none cursor-ns-resize"
+                className={`h-full min-w-0 flex-1 touch-none rounded-xl bg-transparent px-3 outline-none ${
+                  completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
+                }`}
+                disabled={completed}
                 inputMode="decimal"
                 value={load}
                 onChange={(event) => setLoad(event.target.value)}
@@ -204,7 +216,10 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           <div className="min-w-0">
             <label className="section-label">Reps</label>
             <input
-              className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
+              className={`mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 ${
+                completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
+              }`}
+              disabled={completed}
               inputMode="numeric"
               value={reps}
               onChange={(event) => setReps(event.target.value)}
@@ -217,7 +232,10 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           <div className="min-w-0">
             <label className="section-label">Seconds</label>
             <input
-              className="mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 cursor-ns-resize"
+              className={`mt-1 h-10 w-full touch-none rounded-xl border border-line bg-card px-3 ${
+                completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
+              }`}
+              disabled={completed}
               inputMode="numeric"
               value={seconds}
               onChange={(event) => setSeconds(event.target.value)}
@@ -246,6 +264,7 @@ export function ActiveWorkoutPage() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
   const sessionQuery = useWorkoutSession(userId, sessionId);
+  const historyQuery = useCompletedWorkouts(userId);
   const updateSet = useUpdateLoggedSet(userId, sessionId);
   const completeCurrentExercise = useCompleteExercise(userId, sessionId);
 
@@ -265,6 +284,24 @@ export function ActiveWorkoutPage() {
         .length ?? 0,
     [session],
   );
+  const previousPerformance = useMemo(() => {
+    if (!currentPerformance || !historyQuery.data) {
+      return null;
+    }
+
+    return (
+      historyQuery.data
+        .filter((completedSession) => completedSession.completedAt !== null)
+        .find((completedSession) =>
+          completedSession.performances.some(
+            (performance) => performance.exerciseId === currentPerformance.exerciseId,
+          ),
+        )
+        ?.performances.find(
+          (performance) => performance.exerciseId === currentPerformance.exerciseId,
+        ) ?? null
+    );
+  }, [currentPerformance, historyQuery.data]);
 
   useEffect(() => {
     if (session?.status === "completed") {
@@ -352,7 +389,7 @@ export function ActiveWorkoutPage() {
           <div>
             <p className="section-label">Last time</p>
             <p className="mt-1 text-sm font-semibold leading-6 text-ink">
-              {activePerformance.loggedSets
+              {previousPerformance?.loggedSets
                 .map((set) =>
                   summarizeSet(
                     set,
