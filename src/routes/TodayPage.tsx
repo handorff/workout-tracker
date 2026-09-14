@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { formatLoad, formatRange } from "../lib/format";
@@ -9,6 +10,8 @@ import { StatusView } from "../components/StatusView";
 
 export function TodayPage() {
   const navigate = useNavigate();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const { user } = useAuth();
   const userId = user?.id ?? "";
   const todayQuery = useTodayData(userId);
@@ -31,8 +34,12 @@ export function TodayPage() {
     );
   }
 
-  const { inProgressSession, nextTemplate, exerciseRecommendations } = todayQuery.data;
-  const exercises = sortTemplateExercises(nextTemplate);
+  const { inProgressSession, nextTemplate, templates, recommendationsByTemplate } = todayQuery.data;
+  const selectedTemplate = inProgressSession?.template
+    ?? templates.find((template) => template.id === selectedTemplateId)
+    ?? nextTemplate;
+  const exerciseRecommendations = recommendationsByTemplate[selectedTemplate.id] ?? {};
+  const exercises = sortTemplateExercises(selectedTemplate);
   const activeRecommendations = new Map(
     inProgressSession?.performances.map((performance) => [
       performance.exerciseId,
@@ -45,8 +52,17 @@ export function TodayPage() {
   );
 
   async function handleStart() {
-    const session = await startWorkout.mutateAsync();
-    navigate(`/workout/${session.id}`);
+    setStartError(null);
+    if (inProgressSession) {
+      navigate(`/workout/${inProgressSession.id}`);
+      return;
+    }
+    try {
+      const session = await startWorkout.mutateAsync(selectedTemplate.id);
+      navigate(`/workout/${session.id}`);
+    } catch {
+      setStartError("This workout could not be started. Please try again.");
+    }
   }
 
   async function handleSignOut() {
@@ -70,6 +86,24 @@ export function TodayPage() {
         </div>
       </header>
 
+      <fieldset className="space-y-3" disabled={Boolean(inProgressSession) || startWorkout.isPending}>
+        <legend className="section-label mb-3">Choose workout</legend>
+        <div className="flex flex-wrap gap-2">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              aria-pressed={selectedTemplate.id === template.id}
+              className={`secondary-button h-11 flex-1 px-4 text-sm disabled:cursor-not-allowed ${selectedTemplate.id === template.id ? "border-ink ring-1 ring-ink" : ""}`}
+              onClick={() => { setSelectedTemplateId(template.id); setStartError(null); }}
+            >
+              {template.name}
+            </button>
+          ))}
+        </div>
+        {inProgressSession && <p className="text-sm leading-6">Finish your current workout before choosing another.</p>}
+      </fieldset>
+
       <section className="card space-y-4 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
@@ -77,18 +111,18 @@ export function TodayPage() {
               {inProgressSession ? "Resume workout" : "Next workout"}
             </p>
             <h2 className="font-display text-3xl font-bold text-ink">
-              {inProgressSession?.template.name ?? nextTemplate.name}
+              {selectedTemplate.name}
             </h2>
           </div>
-          <span className="rounded-full bg-black/5 px-4 py-2 text-sm font-semibold text-success">
-            {inProgressSession?.template.exercises.length ?? exercises.length} exercises
+          <span className="shrink-0 rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink">
+            {exercises.length} exercises
           </span>
         </div>
-        {(inProgressSession?.template.warmupNotes ?? nextTemplate.warmupNotes) && (
+        {(selectedTemplate.warmupNotes) && (
           <div>
             <p className="section-label">Warm-up</p>
             <p className="mt-2 text-sm leading-6 text-ink">
-              {inProgressSession?.template.warmupNotes ?? nextTemplate.warmupNotes}
+              {selectedTemplate.warmupNotes}
             </p>
           </div>
         )}
@@ -99,7 +133,7 @@ export function TodayPage() {
           <h2 className="font-display text-2xl font-bold text-ink">Exercises</h2>
         </div>
         <div className="space-y-3">
-          {(inProgressSession?.template.exercises ?? exercises).map((item) => (
+          {exercises.map((item) => (
             (() => {
               const recommendation =
                 activeRecommendations.get(item.exerciseId) ??
@@ -117,13 +151,13 @@ export function TodayPage() {
               return (
                 <Link
                   key={item.id}
-                  className="flex items-start justify-between gap-4 transition hover:text-success"
-                  to={`/exercises/${item.exerciseId}`}
+                  className="flex items-start justify-between gap-4 border-t border-line pt-3 first:border-0 first:pt-0 hover:underline underline-offset-4"
+                  to={`/exercises/${item.exerciseId}?workout=${selectedTemplate.id}`}
                 >
                   <div className="space-y-1">
                     <p className="text-lg font-semibold text-ink">{item.exercise.name}</p>
                     <p className="text-sm text-muted">
-                      {item.targetSets} x{" "}
+                      {item.exercise.unit === "minutes" ? "Optional · minutes" : <>{item.targetSets} x{" "}
                       {item.targetSecondsMin != null
                         ? formatRange(item.targetSecondsMin, item.targetSecondsMax, "s")
                         : formatRange(item.targetRepMin, item.targetRepMax)}
@@ -131,10 +165,10 @@ export function TodayPage() {
                       item.targetSecondsMin == null &&
                       item.targetRepMin != null
                         ? "/side"
-                        : ""}
+                        : ""}</>}
                     </p>
                     {suggestedLoad && (
-                      <p className="text-sm font-semibold text-success">
+                      <p className="text-sm font-semibold text-ink">
                         Suggested: {suggestedLoad}
                       </p>
                     )}
@@ -151,8 +185,10 @@ export function TodayPage() {
         </div>
       </section>
 
+      {startError && <p role="alert" className="text-sm font-semibold">{startError}</p>}
+
       <button
-        className="primary-button fixed bottom-6 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-[390px] -translate-x-1/2 shadow-card"
+        className="primary-button fixed bottom-6 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-[390px] -translate-x-1/2"
         disabled={startWorkout.isPending}
         onClick={handleStart}
       >
@@ -160,7 +196,7 @@ export function TodayPage() {
           ? "Starting..."
           : inProgressSession
             ? `Resume ${inProgressSession.template.name}`
-            : `Start ${nextTemplate.name}`}
+            : `Start ${selectedTemplate.name}`}
       </button>
     </main>
   );

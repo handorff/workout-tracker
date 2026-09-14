@@ -55,6 +55,10 @@ export function formatRange(min: number | null, max: number | null, suffix = "")
 }
 
 export function summarizeSet(set: LoggedSet, unit: string, isAssistance = false) {
+  if (unit === "minutes") {
+    return set.completed && set.seconds != null ? `${Number((set.seconds / 60).toFixed(2))} min` : "";
+  }
+
   const parts: string[] = [];
 
   if (set.loadValue != null) {

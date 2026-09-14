@@ -4,9 +4,9 @@
 
 @layer base {
   :root {
-    color: #172126;
-    background: #f6f4ef;
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    color: #000000;
+    background: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
   }
 
   * {
@@ -17,8 +17,24 @@
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
-    background: #f6f4ef;
-    color: #172126;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  :focus-visible {
+    outline: 2px solid #000000;
+    outline-offset: 3px;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #000000;
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: #f7da21;
+    color: #000000;
   }
 
   a {
@@ -39,26 +55,26 @@
   }
 
   .card {
-    @apply rounded-card border border-line bg-card shadow-card;
+    @apply rounded-card border border-line bg-transparent;
   }
 
   .section-label {
-    @apply text-xs font-bold uppercase tracking-[0.18em] text-muted;
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-ink;
   }
 
   .page-title {
-    @apply font-display text-4xl font-bold tracking-tight text-ink;
+    @apply font-display text-3xl font-semibold tracking-tight text-ink;
   }
 
   .primary-button {
-    @apply inline-flex h-14 items-center justify-center rounded-2xl bg-ink px-5 text-base font-bold text-mist transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-14 items-center justify-center rounded-lg border border-transparent bg-accent px-5 text-base font-semibold text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .secondary-button {
-    @apply inline-flex h-14 items-center justify-center rounded-2xl border border-line bg-card px-5 text-base font-bold text-ink transition hover:bg-black/5;
+    @apply inline-flex h-14 items-center justify-center shrink-0 rounded-lg border border-line bg-transparent px-5 text-base font-semibold text-ink transition-colors hover:border-ink;
   }
 
   .input {
-    @apply h-12 w-full rounded-2xl border border-line bg-card px-4 text-base text-ink outline-none transition focus:border-ink;
+    @apply h-12 w-full rounded-lg border border-line bg-transparent px-4 text-base text-ink outline-none transition focus:border-ink;
   }
 }

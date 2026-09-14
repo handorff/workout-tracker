@@ -64,8 +64,8 @@ export function HistoryPage() {
       </header>
 
       {deleteError ? (
-        <section className="card border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-semibold text-red-700">{deleteError}</p>
+        <section className="card border-ink p-4">
+          <p className="text-sm font-semibold text-ink">{deleteError}</p>
         </section>
       ) : null}
 
@@ -124,7 +124,7 @@ export function HistoryPage() {
                     <Link
                       key={performance.id}
                       className="block underline-offset-4 hover:underline"
-                      to={`/exercises/${performance.exerciseId}`}
+                      to={`/exercises/${performance.exerciseId}?workout=${session.workoutTemplateId}`}
                     >
                       <span className="block text-sm font-semibold leading-5 text-ink">
                         {performance.exercise.name}

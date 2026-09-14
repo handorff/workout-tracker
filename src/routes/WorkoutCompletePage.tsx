@@ -1,3 +1,4 @@
+import { isCardioWorkout } from "../features/workouts/logic";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { formatDurationMinutes, summarizeSet } from "../lib/format";
@@ -42,12 +43,12 @@ export function WorkoutCompletePage() {
           <div className="space-y-1">
             <p className="section-label">Summary</p>
             <p className="text-2xl font-bold text-ink">
-              {session.performances.length} exercises •{" "}
+              {isCardioWorkout(session.template) ? `${session.performances.length} activities • ${Number((session.performances.flatMap((p) => p.loggedSets).reduce((total, set) => total + (set.seconds ?? 0), 0) / 60).toFixed(2))} min` : <>{session.performances.length} exercises •{" "}
               {session.performances.reduce(
                 (count, performance) => count + performance.loggedSets.length,
                 0,
               )}{" "}
-              sets
+              sets</>}
             </p>
           </div>
           <span className="text-sm font-semibold text-muted">

@@ -30,7 +30,7 @@ npm run dev
 
 ## Supabase setup
 
-Apply the SQL migration in `supabase/migrations/202604050001_init.sql`.
+Apply the SQL migrations in `supabase/migrations/` in filename order. For an existing database, apply `202609140001_cardio.sql` to add Cardio and its four optional activities. Cardio durations are displayed and entered in minutes; the existing `seconds` column stores the duration.
 
 Supabase Auth settings required for this app:
 

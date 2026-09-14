@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ExercisePerformance, WorkoutTemplateExercise } from "../../types/domain";
-import { buildInitialLoggedSet, getNextWorkoutName, getRecommendation } from "./logic";
+import type { ExercisePerformance, WorkoutTemplateExercise, WorkoutSession } from "../../types/domain";
+import { buildInitialLoggedSet, getNextWorkoutName, getRecommendation, findLatestPerformance } from "./logic";
 
 function buildTemplateExercise(
   overrides: Partial<WorkoutTemplateExercise> = {},
@@ -79,11 +79,15 @@ describe("getNextWorkoutName", () => {
     expect(getNextWorkoutName(null)).toBe("Workout A");
   });
 
-  it("alternates from Workout A to Workout B", () => {
-    expect(getNextWorkoutName("Workout A")).toBe("Workout B");
+  it("selects Cardio after Workout A", () => {
+    expect(getNextWorkoutName("Workout A")).toBe("Cardio");
   });
 
-  it("alternates from Workout B back to Workout A", () => {
+  it("selects Workout B after Cardio", () => {
+    expect(getNextWorkoutName("Cardio")).toBe("Workout B");
+  });
+
+  it("cycles from Workout B back to Workout A", () => {
     expect(getNextWorkoutName("Workout B")).toBe("Workout A");
   });
 });
@@ -141,5 +145,80 @@ describe("buildInitialLoggedSet", () => {
 
     expect(initial.loadValue).toBe(130);
     expect(initial.completed).toBe(false);
+  });
+});
+
+describe("recommendations from actual logged weight", () => {
+  it("uses 20 lb logged for 3 x 8 to suggest 25 lb even if the previous suggestion was 60 lb", () => {
+    const previous = buildPerformance([8, 8, 8], 20);
+    previous.recommendedLoadValue = 60;
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(25);
+  });
+
+  it.each([[8, 8, 7], [8, 6, 8], [8, 8]])("keeps the actual weight when prescribed sets miss the maximum: %j", (...reps) => {
+    const previous = buildPerformance(reps, 20);
+    previous.recommendedLoadValue = 60;
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(20);
+  });
+
+  it("requires completed sets and ignores an unlogged heavier default", () => {
+    const previous = buildPerformance([8, 8, 8], 20);
+    previous.loggedSets[2].completed = false;
+    previous.loggedSets[2].loadValue = 60;
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(20);
+  });
+
+  it("applies the rep requirement to lifts using the old complete-all-sets rule too", () => {
+    const template = buildTemplateExercise({ progressionRuleType: "complete_all_sets_increase" });
+    expect(getRecommendation(template, buildPerformance([8, 8, 7], 20)).recommendedLoadValue).toBe(20);
+    expect(getRecommendation(template, buildPerformance([8, 8, 8], 20)).recommendedLoadValue).toBe(25);
+  });
+
+  it("uses the fixed rep target for fixed-rep exercises", () => {
+    const template = buildTemplateExercise({ targetRepMin: 5, targetRepMax: 5, progressionRuleType: "complete_all_sets_increase" });
+    expect(getRecommendation(template, buildPerformance([5, 5, 4], 20)).recommendedLoadValue).toBe(20);
+    expect(getRecommendation(template, buildPerformance([5, 5, 5], 20)).recommendedLoadValue).toBe(25);
+  });
+
+  it("uses the last completed set's weight when loads differ, regardless of array order", () => {
+    const previous = buildPerformance([8, 7, 6], 20);
+    previous.loggedSets[0].loadValue = 30;
+    previous.loggedSets.reverse();
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(20);
+  });
+
+  it("retains the latest recorded weight when a workout was finished without checking off sets", () => {
+    const previous = buildPerformance([8, 8, 8], 20);
+    previous.recommendedLoadValue = 60;
+    previous.loggedSets.forEach((set) => { set.completed = false; });
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(20);
+  });
+
+  it("uses the configured starting weight when the exercise has no history", () => {
+    expect(getRecommendation(buildTemplateExercise(), null).recommendedLoadValue).toBe(50);
+  });
+});
+
+function historySession(date: string, templateId: string, weight: number): WorkoutSession {
+  return {
+    id: date, userId: "user", workoutTemplateId: templateId, status: "completed", startedAt: date, completedAt: date,
+    template: { id: templateId, name: templateId, orderIndex: 1, warmupNotes: null, finisherNotes: null, exercises: [] },
+    performances: [buildPerformance([8, 8, 8], weight)],
+  };
+}
+
+describe("same-workout exercise history", () => {
+  it("chooses the latest matching performance, ignoring older heavier loads and other workouts", () => {
+    const sessions = [
+      historySession("2026-03-01", "template-1", 60),
+      historySession("2026-09-14", "other-workout", 80),
+      historySession("2026-09-10", "template-1", 20),
+    ];
+    const previous = findLatestPerformance(sessions, "template-1", "exercise-1");
+    expect(getRecommendation(buildTemplateExercise(), previous).recommendedLoadValue).toBe(25);
+  });
+  it("does not borrow history from another workout or an unfinished session", () => {
+    const unfinished = { ...historySession("2026-09-14", "template-1", 60), status: "in_progress" as const };
+    expect(findLatestPerformance([unfinished, historySession("2026-09-10", "other", 20)], "template-1", "exercise-1")).toBeNull();
   });
 });

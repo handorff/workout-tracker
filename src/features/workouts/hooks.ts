@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   completeExercise,
+  finishCardioWorkout,
   deleteWorkoutSession,
   fetchCompletedWorkouts,
   fetchExercise,
@@ -24,7 +25,7 @@ export function useStartWorkout(userId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => startNextWorkout(userId),
+    mutationFn: (templateId: string) => startNextWorkout(userId, templateId),
     onSuccess: (session) => {
       queryClient.setQueryData(["session", userId, session.id], session);
       queryClient.invalidateQueries({ queryKey: ["today", userId] });
@@ -47,10 +48,10 @@ export function useInProgressWorkout(userId: string) {
   });
 }
 
-export function useCompletedWorkouts(userId: string) {
+export function useCompletedWorkouts(userId: string, templateId?: string) {
   return useQuery({
-    queryKey: ["history", userId],
-    queryFn: () => fetchCompletedWorkouts(userId),
+    queryKey: ["history", userId, templateId],
+    queryFn: () => fetchCompletedWorkouts(userId, 20, templateId),
   });
 }
 
@@ -71,10 +72,10 @@ export function useDeleteWorkoutSession(userId: string) {
   });
 }
 
-export function useExerciseDetail(userId: string, exerciseId: string) {
+export function useExerciseDetail(userId: string, exerciseId: string, templateId?: string) {
   return useQuery({
-    queryKey: ["exercise-detail", userId, exerciseId],
-    queryFn: () => fetchExerciseDetail(userId, exerciseId),
+    queryKey: ["exercise-detail", userId, exerciseId, templateId],
+    queryFn: () => fetchExerciseDetail(userId, exerciseId, templateId),
   });
 }
 
@@ -113,6 +114,19 @@ export function useCompleteExercise(userId: string, sessionId: string) {
       queryClient.setQueryData(["session", userId, sessionId], session);
       queryClient.invalidateQueries({ queryKey: ["today", userId] });
       queryClient.invalidateQueries({ queryKey: ["history", userId] });
+    },
+  });
+}
+
+export function useFinishCardioWorkout(userId: string, sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => finishCardioWorkout(userId, sessionId),
+    onSuccess: (session) => {
+      queryClient.setQueryData(["session", userId, sessionId], session);
+      queryClient.invalidateQueries({ queryKey: ["today", userId] });
+      queryClient.invalidateQueries({ queryKey: ["history", userId] });
+      queryClient.invalidateQueries({ queryKey: ["exercise-detail", userId] });
     },
   });
 }

@@ -8,15 +8,11 @@ declare const _default: {
                 muted: string;
                 card: string;
                 line: string;
-                success: string;
                 accent: string;
             };
             fontFamily: {
                 sans: [string, string, string];
                 display: [string, string, string];
-            };
-            boxShadow: {
-                card: string;
             };
             borderRadius: {
                 card: string;

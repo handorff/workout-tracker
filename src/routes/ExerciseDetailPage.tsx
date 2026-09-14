@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { formatLoad, formatWorkoutDate, summarizeSet } from "../lib/format";
 import { useAuth } from "../features/auth/auth-context";
@@ -7,9 +7,10 @@ import { StatusView } from "../components/StatusView";
 
 export function ExerciseDetailPage() {
   const { exerciseId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const userId = user?.id ?? "";
-  const detailQuery = useExerciseDetail(userId, exerciseId);
+  const detailQuery = useExerciseDetail(userId, exerciseId, searchParams.get("workout") ?? undefined);
 
   if (!user) {
     return null;
@@ -35,7 +36,7 @@ export function ExerciseDetailPage() {
     currentRecommendationSeconds,
   } = detailQuery.data;
   const recommendationValue =
-    currentRecommendationLoad != null
+    exercise.unit === "minutes" ? "Your choice · minutes" : currentRecommendationLoad != null
       ? formatLoad(
           currentRecommendationLoad,
           exercise.unit,
@@ -65,7 +66,7 @@ export function ExerciseDetailPage() {
             <p className="section-label">Current recommendation</p>
             <p className="text-4xl font-bold text-ink">{recommendationValue}</p>
           </div>
-          <span className="rounded-full bg-black/[0.03] px-3 py-2 text-sm font-semibold text-ink">
+          <span className="shrink-0 rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink">
             {exercise.loadMode}
           </span>
         </div>

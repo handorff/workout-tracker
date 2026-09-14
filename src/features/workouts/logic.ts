@@ -7,13 +7,6 @@ import type {
   WorkoutTemplateExercise,
 } from "../../types/domain";
 
-function areAllSetsCompleted(loggedSets: LoggedSet[], targetSets: number) {
-  return (
-    loggedSets.length >= targetSets &&
-    loggedSets.slice(0, targetSets).every((set) => set.completed)
-  );
-}
-
 function hitTopRepRange(
   loggedSets: LoggedSet[],
   targetSets: number,
@@ -56,12 +49,19 @@ function getLastSetValue<T>(loggedSets: LoggedSet[], accessor: (set: LoggedSet) 
   return null;
 }
 
-export function getNextWorkoutName(lastCompletedName: string | null | undefined) {
-  if (!lastCompletedName || lastCompletedName === "Workout B") {
-    return "Workout A";
-  }
+export function isCardioWorkout(template: WorkoutTemplate) {
+  return template.name === "Cardio";
+}
 
-  return "Workout B";
+export function getNextWorkoutName(lastCompletedName: string | null | undefined) {
+  switch (lastCompletedName) {
+    case "Workout A":
+      return "Cardio";
+    case "Cardio":
+      return "Workout B";
+    default:
+      return "Workout A";
+  }
 }
 
 export function getCurrentPerformance(session: WorkoutSession) {
@@ -89,9 +89,9 @@ export function getRecommendation(
   const increment =
     templateExercise.progressionIncrement ?? templateExercise.exercise.defaultIncrement ?? 0;
 
-  const previousSets = previousPerformance?.loggedSets ?? [];
+  const previousSets = [...(previousPerformance?.loggedSets ?? [])].sort((a, b) => a.setNumber - b.setNumber);
   const previousLoad =
-    previousPerformance?.recommendedLoadValue ??
+    getLastSetValue(previousSets.filter((set) => set.completed), (set) => set.loadValue) ??
     getLastSetValue(previousSets, (set) => set.loadValue) ??
     templateExercise.startingLoadValue;
   const previousSeconds =
@@ -124,7 +124,7 @@ export function getRecommendation(
       const success = hitTopRepRange(
         previousSets,
         templateExercise.targetSets,
-        templateExercise.targetRepMax,
+        templateExercise.targetRepMax ?? templateExercise.targetRepMin,
       );
 
       return {
@@ -141,7 +141,7 @@ export function getRecommendation(
       const success = hitTopRepRange(
         previousSets,
         templateExercise.targetSets,
-        templateExercise.targetRepMax,
+        templateExercise.targetRepMax ?? templateExercise.targetRepMin,
       );
 
       return {
@@ -163,7 +163,7 @@ export function getRecommendation(
               templateExercise.targetSets,
               templateExercise.targetSecondsMin,
             )
-          : areAllSetsCompleted(previousSets, templateExercise.targetSets);
+          : hitTopRepRange(previousSets, templateExercise.targetSets, templateExercise.targetRepMax ?? templateExercise.targetRepMin);
 
       if (templateExercise.exercise.loadMode === "bodyweight") {
         return {
@@ -181,8 +181,8 @@ export function getRecommendation(
         recommendedSecondsValue: previousSeconds,
         recommendationText:
           success && increment > 0
-            ? `All sets were completed cleanly, so increase by ${increment} ${templateExercise.exercise.unit}.`
-            : "Keep the same load until all prescribed sets are completed cleanly.",
+            ? `All sets reached the target last time, so increase by ${increment} ${templateExercise.exercise.unit}.`
+            : "Keep the same load until all prescribed sets reach the target.",
       };
     }
   }
@@ -240,4 +240,13 @@ export function findExerciseHistory(
 
 export function sortTemplateExercises(template: WorkoutTemplate) {
   return [...template.exercises].sort((a, b) => a.orderIndex - b.orderIndex);
+}
+
+export function findLatestPerformance(
+  sessions: WorkoutSession[], templateId: string, exerciseId: string,
+) {
+  return findExerciseHistory(
+    sessions.filter((session) => session.status === "completed" && session.workoutTemplateId === templateId),
+    exerciseId,
+  )[0]?.performance ?? null;
 }

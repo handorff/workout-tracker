@@ -10,7 +10,9 @@ import type {
 } from "../../types/domain";
 import {
   buildInitialLoggedSet,
+  isCardioWorkout,
   findExerciseHistory,
+  findLatestPerformance,
   getNextWorkoutName,
   getRecommendation,
   sortTemplateExercises,
@@ -95,15 +97,16 @@ type RawSession = {
 interface TodayData {
   inProgressSession: WorkoutSession | null;
   nextTemplate: WorkoutTemplate;
+  templates: WorkoutTemplate[];
   lastCompletedWorkoutName: string | null;
-  exerciseRecommendations: Record<
+  recommendationsByTemplate: Record<string, Record<
     string,
     {
       recommendedLoadValue: number | null;
       recommendedSecondsValue: number | null;
       recommendationText: string;
     }
-  >;
+  >>;
 }
 
 interface ExerciseDetailData {
@@ -323,7 +326,7 @@ function mapPerformance(raw: RawPerformance): ExercisePerformance {
 }
 
 function mapSession(raw: RawSession): WorkoutSession {
-  return {
+  const session: WorkoutSession = {
     id: raw.id,
     userId: raw.user_id,
     workoutTemplateId: raw.workout_template_id,
@@ -337,6 +340,12 @@ function mapSession(raw: RawSession): WorkoutSession {
       .map(mapPerformance)
       .sort((a, b) => a.exerciseOrder - b.exerciseOrder),
   };
+  if (session.status === "completed" && isCardioWorkout(session.template)) {
+    session.performances = session.performances
+      .map((performance) => ({ ...performance, loggedSets: performance.loggedSets.filter((set) => set.completed) }))
+      .filter((performance) => performance.loggedSets.length > 0);
+  }
+  return session;
 }
 
 async function fetchTemplates() {
@@ -404,20 +413,32 @@ export async function fetchInProgressWorkout(userId: string) {
   return mapSession(data as RawSession);
 }
 
-export async function fetchCompletedWorkouts(userId: string, limit = 20) {
-  const { data, error } = await supabase
+export async function fetchCompletedWorkouts(userId: string, limit = 20, templateId?: string, offset = 0) {
+  let query = supabase
     .from("workout_sessions")
     .select(sessionSelect)
     .eq("user_id", userId)
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
-    .limit(limit);
+    .order("id", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (templateId) query = query.eq("workout_template_id", templateId);
+  const { data, error } = await query;
 
   if (error) {
     throw error;
   }
 
   return (data as RawSession[]).map(mapSession);
+}
+
+async function fetchRecommendationHistory(userId: string, templateId?: string) {
+  const sessions: WorkoutSession[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await fetchCompletedWorkouts(userId, 100, templateId, offset);
+    sessions.push(...page);
+    if (page.length < 100) return sessions;
+  }
 }
 
 export async function deleteWorkoutSession(sessionId: string, userId: string) {
@@ -436,7 +457,7 @@ export async function fetchTodayData(userId: string): Promise<TodayData> {
   const [inProgressSession, templates, completedSessions] = await Promise.all([
     fetchInProgressWorkout(userId),
     fetchTemplates(),
-    fetchCompletedWorkouts(userId, 30),
+    fetchRecommendationHistory(userId),
   ]);
 
   const lastCompletedWorkoutName = completedSessions[0]?.template.name ?? null;
@@ -445,50 +466,25 @@ export async function fetchTodayData(userId: string): Promise<TodayData> {
     templates.find((template) => template.name === nextWorkoutName),
     "Next workout template missing from seed data",
   );
-  const latestByExerciseId = new Map<string, ExercisePerformance>();
-
-  for (const session of completedSessions) {
-    for (const performance of session.performances) {
-      if (!latestByExerciseId.has(performance.exerciseId)) {
-        latestByExerciseId.set(performance.exerciseId, performance);
-      }
-    }
-  }
-
-  const exerciseRecommendations = Object.fromEntries(
-    sortTemplateExercises(nextTemplate).map((templateExercise) => [
-      templateExercise.exerciseId,
-      getRecommendation(
-        templateExercise,
-        latestByExerciseId.get(templateExercise.exerciseId) ?? null,
-      ),
-    ]),
+  const recommendationsByTemplate = Object.fromEntries(
+    templates.map((template) => [template.id, Object.fromEntries(
+      sortTemplateExercises(template).map((templateExercise) => [
+        templateExercise.exerciseId,
+        getRecommendation(templateExercise, findLatestPerformance(completedSessions, templateExercise.workoutTemplateId, templateExercise.exerciseId)),
+      ]),
+    )]),
   );
 
   return {
     inProgressSession,
     nextTemplate,
     lastCompletedWorkoutName,
-    exerciseRecommendations,
+    templates,
+    recommendationsByTemplate,
   };
 }
 
-async function getLatestCompletedPerformanceMap(userId: string) {
-  const completedSessions = await fetchCompletedWorkouts(userId, 30);
-  const latestByExerciseId = new Map<string, ExercisePerformance>();
-
-  for (const session of completedSessions) {
-    for (const performance of session.performances) {
-      if (!latestByExerciseId.has(performance.exerciseId)) {
-        latestByExerciseId.set(performance.exerciseId, performance);
-      }
-    }
-  }
-
-  return latestByExerciseId;
-}
-
-export async function startNextWorkout(userId: string) {
+export async function startNextWorkout(userId: string, templateId?: string) {
   const existingSession = await fetchInProgressWorkout(userId);
 
   if (existingSession) {
@@ -496,8 +492,10 @@ export async function startNextWorkout(userId: string) {
   }
 
   const todayData = await fetchTodayData(userId);
-  const latestByExerciseId = await getLatestCompletedPerformanceMap(userId);
-  const template = todayData.nextTemplate;
+  const template = templateId
+    ? assertExists(todayData.templates.find((item) => item.id === templateId), "Selected workout is unavailable")
+    : todayData.nextTemplate;
+  const completedSessions = await fetchRecommendationHistory(userId, template.id);
 
   const { data: sessionRecord, error: sessionError } = await supabase
     .from("workout_sessions")
@@ -515,7 +513,7 @@ export async function startNextWorkout(userId: string) {
 
   const orderedExercises = sortTemplateExercises(template);
   const performanceInsertPayload = orderedExercises.map((templateExercise) => {
-    const previousPerformance = latestByExerciseId.get(templateExercise.exerciseId) ?? null;
+    const previousPerformance = findLatestPerformance(completedSessions, templateExercise.workoutTemplateId, templateExercise.exerciseId);
     const recommendation = getRecommendation(templateExercise, previousPerformance);
 
     return {
@@ -549,7 +547,7 @@ export async function startNextWorkout(userId: string) {
       orderedExercises.find((item) => item.exerciseId === performanceRow.exercise_id),
       "Template exercise missing while building sets",
     );
-    const previousPerformance = latestByExerciseId.get(templateExercise.exerciseId) ?? null;
+    const previousPerformance = findLatestPerformance(completedSessions, templateExercise.workoutTemplateId, templateExercise.exerciseId);
     const recommendation = getRecommendation(templateExercise, previousPerformance);
 
     return Array.from({ length: templateExercise.targetSets }, (_, index) => {
@@ -652,18 +650,21 @@ export async function completeExercise(
 export async function fetchExerciseDetail(
   userId: string,
   exerciseId: string,
+  templateId?: string,
 ): Promise<ExerciseDetailData> {
   const [exercise, templates, completedSessions] = await Promise.all([
     fetchExercise(exerciseId),
     fetchTemplates(),
-    fetchCompletedWorkouts(userId, 30),
+    fetchRecommendationHistory(userId),
   ]);
 
   const templateExercise =
-    templates.flatMap((template) => template.exercises).find((item) => item.exerciseId === exerciseId) ??
+    templates.filter((template) => !templateId || template.id === templateId).flatMap((template) => template.exercises).find((item) => item.exerciseId === exerciseId) ??
     null;
   const recentPerformances = findExerciseHistory(completedSessions, exerciseId);
-  const latestPerformance = recentPerformances[0]?.performance ?? null;
+  const latestPerformance = templateExercise
+    ? findLatestPerformance(completedSessions, templateExercise.workoutTemplateId, exerciseId)
+    : null;
   const recommendation =
     templateExercise != null
       ? getRecommendation(templateExercise, latestPerformance)
@@ -681,4 +682,17 @@ export async function fetchExerciseDetail(
     currentRecommendationLoad: recommendation.recommendedLoadValue,
     currentRecommendationSeconds: recommendation.recommendedSecondsValue,
   };
+}
+
+export async function finishCardioWorkout(userId: string, sessionId: string) {
+  const session = await fetchWorkoutSession(sessionId, userId);
+  if (!isCardioWorkout(session.template)) {
+    throw new Error("Only cardio workouts can finish with optional exercises remaining.");
+  }
+  if (session.status === "completed") return session;
+  const { error } = await supabase.from("workout_sessions")
+    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .eq("id", sessionId).eq("user_id", userId).eq("status", "in_progress");
+  if (error) throw error;
+  return fetchWorkoutSession(sessionId, userId);
 }

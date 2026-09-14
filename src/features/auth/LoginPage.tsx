@@ -87,11 +87,11 @@ export function LoginPage() {
               },
             })}
           />
-          {errors.email && <p className="text-sm text-accent">{errors.email.message}</p>}
+          {errors.email && <p className="text-sm text-ink">{errors.email.message}</p>}
         </div>
 
-        {statusMessage && <p className="text-sm text-success">{statusMessage}</p>}
-        {errorMessage && <p className="text-sm text-accent">{errorMessage}</p>}
+        {statusMessage && <p className="text-sm text-ink">{statusMessage}</p>}
+        {errorMessage && <p className="text-sm text-ink">{errorMessage}</p>}
 
         <button className="primary-button w-full" disabled={isSubmitting} type="submit">
           {isSubmitting ? "Sending..." : "Send Magic Link"}

@@ -29,7 +29,7 @@ export function ExerciseHelpPage() {
           <p className="section-label">Exercise Help</p>
           <h1 className="page-title">{exercise.name}</h1>
         </div>
-        <Link className="secondary-button h-10 w-10 px-0 text-lg" to={`/workout/${sessionId}`}>
+        <Link className="secondary-button h-10 w-10 px-0 text-lg" to={`/workout/${sessionId}?exercise=${exerciseId}`}>
           ×
         </Link>
       </header>
@@ -46,7 +46,7 @@ export function ExerciseHelpPage() {
         </section>
       ))}
 
-      <Link className="primary-button mt-auto w-full" to={`/workout/${sessionId}`}>
+      <Link className="primary-button mt-auto w-full" to={`/workout/${sessionId}?exercise=${exerciseId}`}>
         Back to Workout
       </Link>
     </main>
