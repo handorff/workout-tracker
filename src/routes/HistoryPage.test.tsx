@@ -152,6 +152,28 @@ describe("HistoryPage", () => {
     expect(screen.getByRole("button", { name: "April 5, 2026: Workout A, Workout A" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("averages distinct visit days over the elapsed portion of this month", () => {
+    mockUseCompletedWorkouts.mockReturnValue({ data: [buildSession(), buildSession("same-day")] });
+    renderPage();
+    expect(screen.getByText("0.5 visits/week so far")).toBeVisible();
+    expect(screen.queryByText("Gym consistency")).not.toBeInTheDocument();
+  });
+
+  it("uses the full length of a past month", async () => {
+    const session = buildSession();
+    session.completedAt = new Date(2026, 2, 5, 12).toISOString();
+    mockUseCompletedWorkouts.mockReturnValue({ data: [session] });
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
+    expect(screen.getByText("0.2 visits/week on average")).toBeVisible();
+  });
+
+  it("hides the average when history cannot be loaded", () => {
+    mockUseCompletedWorkouts.mockReturnValue({ isError: true, data: [] });
+    renderPage();
+    expect(screen.queryByText(/visits\/week/)).not.toBeInTheDocument();
+  });
+
   it("loads the chosen month and supports year boundaries and returning to this month", async () => {
     const user = userEvent.setup();
     vi.setSystemTime(new Date(2026, 0, 15, 12));

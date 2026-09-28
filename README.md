@@ -65,3 +65,9 @@ If Cloudflare auto-detects the app as a Vite static-assets Worker deploy, it alr
 - `npm run build`
 - `npm run typecheck`
 - `npm run test`
+
+### Gym visit goals
+
+On Today, save the initial **2.5 visits/week** goal (or choose 0.5–7 in half-visit increments). Tracking begins on that local calendar day, using fixed 14-day periods; 2.5 visits/week means five visits per period. Later edits take effect at the next period boundary, preserving historical targets. Goal settings and their effective dates are stored in the signed-in user's Supabase Auth metadata (`gym_goal`), so no additional database migration is needed.
+
+Completed workouts count as one visit per calendar day, including cardio. The timezone captured when tracking starts stays fixed across devices. Today displays current progress; Workout Saved shows the period's updated count; History shows average weekly visits beneath the selected calendar month, counting distinct workout days and dividing by the month’s length in weeks (through today for the current month). Completing or deleting workouts refreshes progress through the existing history query invalidation. Missed visits do not carry over into later periods.

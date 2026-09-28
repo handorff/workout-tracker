@@ -1,3 +1,4 @@
+import { GymGoalCard } from "../components/GymGoalCard";
 import { isCardioWorkout } from "../features/workouts/logic";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -37,6 +38,8 @@ export function WorkoutCompletePage() {
       <header className="space-y-2">
         <h1 className="page-title">Workout Saved</h1>
       </header>
+
+      <GymGoalCard mode="complete" completedAt={session.completedAt} />
 
       <section className="space-y-4">
         <div className="flex items-start justify-between gap-3">

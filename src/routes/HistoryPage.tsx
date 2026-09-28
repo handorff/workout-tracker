@@ -59,6 +59,9 @@ export function HistoryPage() {
   const activeDay = selectedDay ?? (sessionsByDay.size ? Math.max(...sessionsByDay.keys()) : null);
   const selectedSessions = activeDay === null ? [] : sessionsByDay.get(activeDay) ?? [];
   const isCurrentMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
+  const daysElapsed = isCurrentMonth ? today.getDate() : daysInMonth;
+  const visitCount = [...sessionsByDay.keys()].filter((day) => day <= daysElapsed).length;
+  const weeklyAverage = (visitCount * 7 / daysElapsed).toFixed(1);
   function changeMonth(offset: number) {
     setMonth(new Date(month.getFullYear(), month.getMonth() + offset, 1));
     setSelectedDay(null);
@@ -76,11 +79,13 @@ export function HistoryPage() {
         </div>
       </header>
 
-      <p className="text-sm leading-6 text-muted">See your consistency, one day at a time. Tap a day for workout details.</p>
       <section className="card space-y-4 p-3 sm:p-4" aria-label="Workout calendar">
         <div className="flex items-center justify-between gap-2">
           <button className="secondary-button h-11 w-11 px-0" aria-label="Previous month" onClick={() => changeMonth(-1)} type="button">‹</button>
-          <h2 className="text-lg font-bold" aria-live="polite">{monthLabel}</h2>
+          <div className="text-center" aria-live="polite">
+            <h2 className="text-lg font-bold">{monthLabel}</h2>
+            {!historyQuery.isLoading && !historyQuery.isError && <p className="mt-1 text-sm text-muted">{weeklyAverage} visits/week{isCurrentMonth ? " so far" : " on average"}</p>}
+          </div>
           <button className="secondary-button h-11 w-11 px-0 disabled:opacity-30" aria-label="Next month" disabled={isCurrentMonth} onClick={() => changeMonth(1)} type="button">›</button>
         </div>
         {!isCurrentMonth && <button className="text-sm font-semibold underline" type="button" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(null); }}>This month</button>}

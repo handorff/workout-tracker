@@ -1,3 +1,4 @@
+import { GymGoalCard } from "../components/GymGoalCard";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -85,6 +86,8 @@ export function TodayPage() {
           </button>
         </div>
       </header>
+
+      <GymGoalCard />
 
       <fieldset className="space-y-3" disabled={Boolean(inProgressSession) || startWorkout.isPending}>
         <legend className="section-label mb-3">Choose workout</legend>
@@ -187,8 +190,9 @@ export function TodayPage() {
 
       {startError && <p role="alert" className="text-sm font-semibold">{startError}</p>}
 
+      <div className="workout-action-bar">
       <button
-        className="primary-button fixed bottom-6 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-[390px] -translate-x-1/2"
+        className="primary-button w-full shadow-lg pointer-events-auto"
         disabled={startWorkout.isPending}
         onClick={handleStart}
       >
@@ -198,6 +202,7 @@ export function TodayPage() {
             ? `Resume ${inProgressSession.template.name}`
             : `Start ${selectedTemplate.name}`}
       </button>
+      </div>
     </main>
   );
 }
