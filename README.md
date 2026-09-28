@@ -32,6 +32,8 @@ npm run dev
 
 Apply the SQL migrations in `supabase/migrations/` in filename order. For an existing database, apply `202609140001_cardio.sql` to add Cardio and its four optional activities. Cardio durations are displayed and entered in minutes; the existing `seconds` column stores the duration.
 
+Apply `202609280001_glute_bridge.sql` to replace Workout A's dumbbell Romanian deadlift with the dumbbell glute bridge: 3 sets of 10-15 reps, starting at bodyweight and progressing by 5 lb after all sets reach 15 reps. Existing RDL workout records are preserved. The replacement takes effect for newly started workouts.
+
 Supabase Auth settings required for this app:
 
 - Enable email magic links
