@@ -1,7 +1,7 @@
 import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HistoryPage } from "./HistoryPage";
 import type { WorkoutSession } from "../types/domain";
@@ -15,7 +15,7 @@ vi.mock("../features/auth/auth-context", () => ({
 }));
 
 vi.mock("../features/workouts/hooks", () => ({
-  useCompletedWorkouts: (userId: string) => mockUseCompletedWorkouts(userId),
+  useCompletedWorkouts: (...args: unknown[]) => mockUseCompletedWorkouts(...args),
   useDeleteWorkoutSession: (userId: string) => mockUseDeleteWorkoutSession(userId),
 }));
 
@@ -84,7 +84,11 @@ function renderPage() {
 }
 
 describe("HistoryPage", () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 3, 15, 12));
     vi.restoreAllMocks();
     mockUseAuth.mockReset();
     mockUseCompletedWorkouts.mockReset();
@@ -113,11 +117,58 @@ describe("HistoryPage", () => {
 
     renderPage();
 
-    expect(screen.getByText("No completed workouts yet")).toBeInTheDocument();
+    expect(screen.getByText("No workouts this month")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to Today" })).toHaveAttribute(
       "href",
       "/today",
     );
+  });
+
+  it("highlights workout days and shows only the selected day's details", async () => {
+    const user = userEvent.setup();
+    const older = buildSession("older");
+    older.completedAt = new Date(2026, 3, 3, 12).toISOString();
+    older.template = { ...older.template, name: "Workout B" };
+    mockUseCompletedWorkouts.mockReturnValue({ data: [buildSession(), older] });
+    renderPage();
+    expect(screen.getByText("Workout A")).toBeVisible();
+    expect(screen.queryByText("Workout B")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "April 3, 2026: Workout B" }));
+    expect(screen.getByText("Workout B")).toBeVisible();
+    expect(screen.queryByText("Workout A")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "April 4, 2026: No workouts" }));
+    expect(screen.getByText("No workouts on this day.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("groups multiple workouts on one local calendar day", () => {
+    const first = buildSession();
+    const second = buildSession("second");
+    first.completedAt = new Date(2026, 3, 5, 0, 30).toISOString();
+    second.completedAt = new Date(2026, 3, 5, 23, 30).toISOString();
+    mockUseCompletedWorkouts.mockReturnValue({ data: [first, second] });
+    renderPage();
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "April 5, 2026: Workout A, Workout A" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("loads the chosen month and supports year boundaries and returning to this month", async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date(2026, 0, 15, 12));
+    renderPage();
+    expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Previous month" }));
+    expect(screen.getByRole("heading", { name: "December 2025" })).toBeVisible();
+    expect(mockUseCompletedWorkouts).toHaveBeenLastCalledWith("user-1", undefined, new Date(2025, 11, 1));
+    await user.click(screen.getByRole("button", { name: "This month" }));
+    expect(screen.getByRole("heading", { name: "January 2026" })).toBeVisible();
+  });
+
+  it("keeps the calendar available while loading and does not claim the month is empty", () => {
+    mockUseCompletedWorkouts.mockReturnValue({ isLoading: true });
+    renderPage();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading completed workouts");
+    expect(screen.queryByText("No workouts this month")).not.toBeInTheDocument();
   });
 
   it("removes a workout after confirmation", async () => {

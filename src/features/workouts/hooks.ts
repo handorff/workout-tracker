@@ -5,6 +5,7 @@ import {
   finishCardioWorkout,
   deleteWorkoutSession,
   fetchCompletedWorkouts,
+  fetchWorkoutMonth,
   fetchExercise,
   fetchExerciseDetail,
   fetchInProgressWorkout,
@@ -48,10 +49,12 @@ export function useInProgressWorkout(userId: string) {
   });
 }
 
-export function useCompletedWorkouts(userId: string, templateId?: string) {
+export function useCompletedWorkouts(userId: string, templateId?: string, month?: Date) {
   return useQuery({
-    queryKey: ["history", userId, templateId],
-    queryFn: () => fetchCompletedWorkouts(userId, 20, templateId),
+    queryKey: ["history", userId, templateId, month?.getFullYear(), month?.getMonth()],
+    queryFn: () => month
+      ? fetchWorkoutMonth(userId, month.getFullYear(), month.getMonth())
+      : fetchCompletedWorkouts(userId, 20, templateId),
   });
 }
 

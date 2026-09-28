@@ -432,6 +432,27 @@ export async function fetchCompletedWorkouts(userId: string, limit = 20, templat
   return (data as RawSession[]).map(mapSession);
 }
 
+export async function fetchWorkoutMonth(userId: string, year: number, month: number) {
+  const start = new Date(year, month, 1).toISOString();
+  const end = new Date(year, month + 1, 1).toISOString();
+  const sessions: WorkoutSession[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await supabase
+      .from("workout_sessions")
+      .select(sessionSelect)
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .gte("completed_at", start)
+      .lt("completed_at", end)
+      .order("completed_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + 99);
+    if (error) throw error;
+    sessions.push(...(data as RawSession[]).map(mapSession));
+    if (data.length < 100) return sessions;
+  }
+}
+
 async function fetchRecommendationHistory(userId: string, templateId?: string) {
   const sessions: WorkoutSession[] = [];
   for (let offset = 0; ; offset += 100) {
