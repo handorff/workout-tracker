@@ -66,9 +66,6 @@ export function ExerciseDetailPage() {
             <p className="section-label">Current recommendation</p>
             <p className="text-4xl font-bold text-ink">{recommendationValue}</p>
           </div>
-          <span className="shrink-0 rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink">
-            {exercise.loadMode}
-          </span>
         </div>
       </section>
 

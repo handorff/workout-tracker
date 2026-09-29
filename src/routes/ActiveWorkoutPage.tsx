@@ -202,6 +202,7 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
                   completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
                 }`}
                 disabled={completed}
+                aria-label={`Set ${set.setNumber} Load (${unit})`}
                 inputMode="decimal"
                 value={load}
                 onChange={(event) => setLoad(event.target.value)}
@@ -222,6 +223,7 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
                 completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
               }`}
               disabled={completed}
+              aria-label={`Set ${set.setNumber} Reps`}
               inputMode="numeric"
               value={reps}
               onChange={(event) => setReps(event.target.value)}
@@ -238,6 +240,7 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
                 completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
               }`}
               disabled={completed}
+              aria-label={`Set ${set.setNumber} Seconds`}
               inputMode="numeric"
               value={seconds}
               onChange={(event) => setSeconds(event.target.value)}
@@ -250,12 +253,83 @@ function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave }: Set
           className={`mt-5 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[13px] font-bold leading-none ${
             completed ? "border-ink bg-accent" : "border-ink"
           }`}
+          aria-label={`Set ${set.setNumber} completed`}
+          aria-pressed={completed}
           onClick={handleToggleCompleted}
           type="button"
         >
           {completed ? "✓" : ""}
         </button>
       </div>
+    </div>
+  );
+}
+
+function CompletedSets({ sets, unit, loadMode, defaultLoadValue, loadStep, onSave }: {
+  sets: LoggedSet[];
+  defaultLoadValue: number | null;
+  loadStep: number;
+  unit: string;
+  loadMode: "weight" | "assistance" | "bodyweight";
+  onSave: (setId: string, patch: Partial<LoggedSet>) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedSets, setSavedSets] = useState(sets);
+  const [resetVersion, setResetVersion] = useState(0);
+
+  useEffect(() => { setSavedSets(sets); }, [sets]);
+
+  async function save(setId: string, patch: Partial<LoggedSet>) {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(setId, patch);
+      setSavedSets((current) => current.map((set) => set.id === setId ? { ...set, ...patch } : set));
+    } catch {
+      setError("This set could not be saved. Please check it off again to retry.");
+      setResetVersion((version) => version + 1);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-2xl font-bold text-ink">{editing ? "Edit sets" : "Completed"}</h2>
+        <button className="text-sm font-semibold underline underline-offset-4" type="button"
+          disabled={saving} onClick={() => { setEditing(!editing); setError(null); }}>
+          {editing ? "Done" : "Edit"}
+        </button>
+      </div>
+      {editing ? (
+        <fieldset disabled={saving} className="space-y-3">
+          {savedSets.map((set) => (
+            <SetRow key={`${set.id}-${resetVersion}`} set={set} unit={unit} loadMode={loadMode}
+              defaultLoadValue={defaultLoadValue} loadStep={loadStep} onSave={save} />
+          ))}
+          {error && <p role="alert" className="text-sm font-semibold">{error}</p>}
+        </fieldset>
+      ) : (
+        <div className="card space-y-3 p-4">
+          <h3 className="section-label">Sets</h3>
+          {savedSets.map((set) => (
+            <p key={set.id} className="text-sm">
+              {set.completed ? summarizeSet(set, unit, loadMode === "assistance") : (
+                <span className="line-through">
+                  {[
+                    set.loadValue != null ? `${set.loadValue} ${unit}` : null,
+                    set.reps != null ? "0" : null,
+                    set.seconds != null ? "0s" : null,
+                  ].filter((value) => value !== null).join(" x ")}
+                </span>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -498,17 +572,18 @@ export function ActiveWorkoutPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl font-bold text-ink">Log sets</h2>
-        </div>
+        {activePerformance.completionStatus !== "completed" && (
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-2xl font-bold text-ink">Log sets</h2>
+          </div>
+        )}
         <div className="space-y-3">
           {activePerformance.completionStatus === "completed" ? (
-            <div className="card space-y-2 p-4">
-              <p className="font-semibold">✓ Completed</p>
-              {activePerformance.loggedSets.map((set) => (
-                <p key={set.id} className="text-sm">{summarizeSet(set, activePerformance.exercise.unit, activePerformance.exercise.loadMode === "assistance")}</p>
-              ))}
-            </div>
+            <CompletedSets key={activePerformance.id} sets={activePerformance.loggedSets}
+              unit={activePerformance.exercise.unit} loadMode={activePerformance.exercise.loadMode}
+              defaultLoadValue={activePerformance.recommendedLoadValue}
+              loadStep={currentTemplateExercise?.progressionIncrement ?? activePerformance.exercise.defaultIncrement ?? 5}
+              onSave={handleSave} />
           ) : activePerformance.loggedSets.map((set) => (
             <SetRow
               key={set.id}

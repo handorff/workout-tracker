@@ -140,10 +140,58 @@ describe("exercise selection", () => {
     expect(screen.getByRole("heading", { name: "Cable Row" })).toBeVisible();
   });
 
+  it("saves corrected values and missing checkmarks without completing the exercise again", async () => {
+    session.performances[1].completionStatus = "completed";
+    mocks.update.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage("/workout/session-1?exercise=exercise-2");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByRole("textbox", { name: "Set 1 Load (lb)" }));
+    await user.type(screen.getByRole("textbox", { name: "Set 1 Load (lb)" }), "55");
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(mocks.update).toHaveBeenCalledWith({ setId: "set-2", values: { loadValue: 55, reps: 8, seconds: null, completed: true } });
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeVisible();
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  it("saves checked set corrections immediately and Done returns to the summary", async () => {
+    session.performances[1].completionStatus = "completed";
+    session.performances[1].loggedSets[0].completed = true;
+    const user = userEvent.setup();
+    renderPage("/workout/session-1?exercise=exercise-2");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("textbox", { name: "Set 1 Reps" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    expect(screen.getByRole("textbox", { name: "Set 1 Reps" })).toBeEnabled();
+    await user.clear(screen.getByRole("textbox", { name: "Set 1 Reps" }));
+    await user.type(screen.getByRole("textbox", { name: "Set 1 Reps" }), "6");
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    expect(mocks.update).toHaveBeenLastCalledWith({ setId: "set-2", values: { loadValue: 50, reps: 6, seconds: null, completed: true } });
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("textbox", { name: "Set 1 Reps" })).toHaveValue("6");
+    expect(screen.getByRole("button", { name: "Set 1 completed" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows failed saves and allows checking the set again to retry", async () => {
+    session.performances[1].completionStatus = "completed";
+    mocks.update.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage("/workout/session-1?exercise=exercise-2");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be saved");
+    expect(screen.getByRole("button", { name: "Set 1 completed" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeVisible();
+  });
+
   it("allows completed exercises to be reviewed without modifying their sets", () => {
     session.performances[1].completionStatus = "completed";
     renderPage("/workout/session-1?exercise=exercise-2");
-    expect(screen.getByText("✓ Completed")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Completed" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Complete Exercise" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
