@@ -103,6 +103,7 @@ export function useUpdateLoggedSet(userId: string, sessionId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", userId, sessionId] });
       queryClient.invalidateQueries({ queryKey: ["today", userId] });
+      queryClient.invalidateQueries({ queryKey: ["exercise-detail", userId] });
       queryClient.invalidateQueries({ queryKey: ["history", userId] });
     },
   });

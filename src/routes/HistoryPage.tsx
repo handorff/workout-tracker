@@ -1,3 +1,5 @@
+import { CompletedSets } from "../components/WorkoutSets";
+import type { WorkoutSession } from "../types/domain";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -6,8 +8,35 @@ import { useAuth } from "../features/auth/auth-context";
 import {
   useCompletedWorkouts,
   useDeleteWorkoutSession,
+  useUpdateLoggedSet,
 } from "../features/workouts/hooks";
 
+
+function PastWorkoutExercises({ session, userId }: { session: WorkoutSession; userId: string }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const updateSet = useUpdateLoggedSet(userId, session.id);
+  const selected = session.performances.find((performance) => performance.id === selectedId);
+  if (selected) {
+    const templateExercise = session.template.exercises.find((item) => item.exerciseId === selected.exerciseId);
+    return <div className="space-y-4">
+      <button className="text-sm font-semibold underline" onClick={() => setSelectedId(null)}>All exercises</button>
+      <h3 className="text-xl font-bold">{selected.exercise.name}</h3>
+      <CompletedSets initiallyEditing onDone={() => setSelectedId(null)} key={selected.id} sets={selected.loggedSets} unit={selected.exercise.unit}
+        loadMode={selected.exercise.loadMode} defaultLoadValue={selected.recommendedLoadValue}
+        loadStep={templateExercise?.progressionIncrement ?? selected.exercise.defaultIncrement ?? 5}
+        onSave={async (setId, values) => { await updateSet.mutateAsync({ setId, values }); }} />
+    </div>;
+  }
+  return <div className="space-y-3">
+    <p className="text-sm">Choose an exercise to edit its sets.</p>
+    {[...session.performances].sort((a, b) => a.exerciseOrder - b.exerciseOrder).map((performance) => (
+      <button key={performance.id} className="card flex w-full items-center justify-between gap-3 p-4 text-left"
+        onClick={() => setSelectedId(performance.id)}>
+        <span className="font-semibold">{performance.exercise.name}</span><span aria-hidden="true">→</span>
+      </button>
+    ))}
+  </div>;
+}
 
 export function HistoryPage() {
   const { user } = useAuth();
@@ -16,6 +45,7 @@ export function HistoryPage() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const historyQuery = useCompletedWorkouts(userId, undefined, month);
   const deleteWorkout = useDeleteWorkoutSession(userId);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [removingSessionId, setRemovingSessionId] = useState<string | null>(null);
 
@@ -37,6 +67,7 @@ export function HistoryPage() {
 
     try {
       await deleteWorkout.mutateAsync(sessionId);
+      setEditingSessionId(null);
     } catch {
       setDeleteError("That workout could not be removed. Try again.");
     } finally {
@@ -148,19 +179,22 @@ export function HistoryPage() {
                 <p className="text-sm text-muted">{session.template.name}</p>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <button
-                  className="text-sm font-semibold text-muted underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={deleteWorkout.isPending && removingSessionId === session.id}
-                  onClick={() => handleRemoveWorkout(session.id)}
-                  type="button"
-                >
-                  {deleteWorkout.isPending && removingSessionId === session.id
-                    ? "Removing..."
-                    : "Remove"}
+                <button className="text-sm font-semibold underline underline-offset-4" type="button"
+                  onClick={() => { setEditingSessionId(editingSessionId === session.id ? null : session.id); setDeleteError(null); }}>
+                  {editingSessionId === session.id ? "Done" : "Edit"}
                 </button>
               </div>
             </div>
-            <div className="space-y-3">
+            {editingSessionId === session.id ? (
+              <div className="space-y-5">
+                <PastWorkoutExercises session={session} userId={userId} />
+                <button className="text-sm font-semibold underline disabled:opacity-50" type="button"
+                  disabled={deleteWorkout.isPending && removingSessionId === session.id}
+                  onClick={() => handleRemoveWorkout(session.id)}>
+                  {deleteWorkout.isPending && removingSessionId === session.id ? "Removing..." : "Remove workout"}
+                </button>
+              </div>
+            ) : <div className="space-y-3">
               {[...session.performances]
                 .sort((a, b) => a.exerciseOrder - b.exerciseOrder)
                 .map((performance) => {
@@ -190,7 +224,7 @@ export function HistoryPage() {
                     </Link>
                   );
                 })}
-            </div>
+            </div>}
           </section>
         ))}
       </div>

@@ -1,11 +1,12 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HistoryPage } from "./HistoryPage";
 import type { WorkoutSession } from "../types/domain";
 
+const mockUpdateSet = vi.fn();
 const mockUseAuth = vi.fn();
 const mockUseCompletedWorkouts = vi.fn();
 const mockUseDeleteWorkoutSession = vi.fn();
@@ -15,6 +16,7 @@ vi.mock("../features/auth/auth-context", () => ({
 }));
 
 vi.mock("../features/workouts/hooks", () => ({
+  useUpdateLoggedSet: () => ({ mutateAsync: mockUpdateSet, isPending: false }),
   useCompletedWorkouts: (...args: unknown[]) => mockUseCompletedWorkouts(...args),
   useDeleteWorkoutSession: (userId: string) => mockUseDeleteWorkoutSession(userId),
 }));
@@ -90,6 +92,7 @@ describe("HistoryPage", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 3, 15, 12));
     vi.restoreAllMocks();
+    mockUpdateSet.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReset();
     mockUseCompletedWorkouts.mockReset();
     mockUseDeleteWorkoutSession.mockReset();
@@ -148,7 +151,7 @@ describe("HistoryPage", () => {
     second.completedAt = new Date(2026, 3, 5, 23, 30).toISOString();
     mockUseCompletedWorkouts.mockReturnValue({ data: [first, second] });
     renderPage();
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "April 5, 2026: Workout A, Workout A" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -193,6 +196,24 @@ describe("HistoryPage", () => {
     expect(screen.queryByText("No workouts this month")).not.toBeInTheDocument();
   });
 
+  it("edits a past exercise using the same set controls and saves immediately", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.queryByRole("button", { name: "Remove workout" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Goblet Squat" }));
+    expect(screen.getByRole("heading", { name: "Edit sets" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    await user.clear(screen.getByRole("textbox", { name: "Set 1 Reps" }));
+    await user.type(screen.getByRole("textbox", { name: "Set 1 Reps" }), "6");
+    await user.click(screen.getByRole("button", { name: "Set 1 completed" }));
+    expect(mockUpdateSet).toHaveBeenLastCalledWith({ setId: "set-1", values: { loadValue: 50, reps: 6, seconds: null, completed: true } });
+    await user.click(within(screen.getByRole("heading", { name: "Edit sets" }).parentElement!).getByRole("button", { name: "Done" }));
+    expect(screen.getByRole("button", { name: "Goblet Squat" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("button", { name: "Remove workout" })).not.toBeInTheDocument();
+  });
+
   it("removes a workout after confirmation", async () => {
     const user = userEvent.setup();
     const mutateAsync = vi.fn().mockResolvedValue(undefined);
@@ -205,7 +226,8 @@ describe("HistoryPage", () => {
 
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Remove workout" }));
 
     expect(window.confirm).toHaveBeenCalledWith(
       "Remove this workout from your history permanently? This cannot be undone.",
@@ -225,7 +247,8 @@ describe("HistoryPage", () => {
 
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Remove workout" }));
 
     expect(await screen.findByText("That workout could not be removed. Try again.")).toBeVisible();
   });
@@ -242,7 +265,8 @@ describe("HistoryPage", () => {
 
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Remove workout" }));
 
     expect(mutateAsync).not.toHaveBeenCalled();
   });
