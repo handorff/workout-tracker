@@ -185,7 +185,7 @@ export function SetRow({ set, unit, loadMode, defaultLoadValue, loadStep, onSave
             <label className="section-label">Load</label>
             <div className="mt-1 flex h-10 items-center rounded-md border border-line bg-transparent">
               <input
-                className={`h-full min-w-0 flex-1 touch-none rounded-md bg-transparent px-3 outline-none ${
+                className={`h-full min-w-0 flex-1 touch-none rounded-md bg-transparent px-3 outline-hidden ${
                   completed ? "cursor-not-allowed text-muted" : "cursor-ns-resize"
                 }`}
                 disabled={completed}

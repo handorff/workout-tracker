@@ -1,6 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #000000;
+  --color-mist: #ffffff;
+  --color-muted: #000000;
+  --color-card: #ffffff;
+  --color-line: #d4d4d4;
+  --color-accent: #f7da21;
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-display: Arial, Helvetica, sans-serif;
+  --radius-card: 8px;
+}
 
 @layer base {
   :root {
@@ -11,6 +21,17 @@
 
   * {
     box-sizing: border-box;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+    opacity: 1;
   }
 
   body {
@@ -75,7 +96,7 @@
   }
 
   .input {
-    @apply h-12 w-full rounded-lg border border-line bg-transparent px-4 text-base text-ink outline-none transition focus:border-ink;
+    @apply h-12 w-full rounded-lg border border-line bg-transparent px-4 text-base text-ink outline-hidden transition focus:border-ink;
   }
 }
 

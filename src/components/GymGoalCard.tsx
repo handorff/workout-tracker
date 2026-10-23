@@ -74,7 +74,7 @@ function GoalProgress({ userId, goal, mode, completedAt }: { userId: string; goa
     {query.isPending ? <p role="status" className="text-sm">Loading goal progress…</p> : query.isError ? <p role="alert" className="text-sm">Goal progress could not be loaded. <button className="underline" onClick={() => query.refetch()}>Try again</button></p> : <>
       <p className="text-2xl font-bold">{count} of {period.target} visits</p>
       <div className="flex gap-1.5" role="progressbar" aria-label="Two-week gym visits" aria-valuemin={0} aria-valuemax={period.target} aria-valuenow={Math.min(count, period.target)} aria-valuetext={`${count} of ${period.target} visits`}>
-        {Array.from({ length: period.target }, (_, index) => <span key={index} className={`h-3 min-w-0 flex-1 rounded-sm border border-line ${index < count ? "bg-accent" : "bg-transparent"}`} />)}
+        {Array.from({ length: period.target }, (_, index) => <span key={index} className={`h-3 min-w-0 flex-1 rounded-xs border border-line ${index < count ? "bg-accent" : "bg-transparent"}`} />)}
       </div>
       {mode === "complete" && <p className="text-sm font-semibold">{remaining === 0 ? "Nice job! You’ve completed your goal!" : `Nice job! Visit ${remaining} more ${remaining === 1 ? "time" : "times"} by ${new Date(`${addDays(period.end, -1)}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" })} to complete your goal.`}</p>}
       {mode === "history" && <div className="space-y-3 border-t border-line pt-3">

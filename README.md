@@ -14,12 +14,14 @@ Single-user workout tracker built with React, Supabase, and Cloudflare Pages.
 
 ## Local development
 
+Use Node.js 22.12 or newer (see `.nvmrc`). Tailwind CSS 4 requires Safari 16.4+, Chrome 111+, or Firefox 128+. Theme tokens live in `src/index.css`, and Tailwind is compiled by the Vite plugin.
+
 1. Copy `.env.example` to `.env`.
 2. Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 3. Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 4. Run the app:
