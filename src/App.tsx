@@ -9,6 +9,7 @@ import { ActiveWorkoutPage } from "./routes/ActiveWorkoutPage";
 import { ExerciseDetailPage } from "./routes/ExerciseDetailPage";
 import { ExerciseHelpPage } from "./routes/ExerciseHelpPage";
 import { HistoryPage } from "./routes/HistoryPage";
+import { OutsideActivityPage } from "./routes/OutsideActivityPage";
 import { TodayPage } from "./routes/TodayPage";
 import { WorkoutCompletePage } from "./routes/WorkoutCompletePage";
 
@@ -22,6 +23,8 @@ export function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/today" element={<TodayPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/outside-activity/new" element={<OutsideActivityPage />} />
+            <Route path="/outside-activity/:activityId/edit" element={<OutsideActivityPage />} />
             <Route path="/exercises/:exerciseId" element={<ExerciseDetailPage />} />
             <Route path="/workout/:sessionId" element={<ActiveWorkoutPage />} />
             <Route

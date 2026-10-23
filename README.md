@@ -42,6 +42,12 @@ Supabase Auth settings required for this app:
 - Disable open signups
 - Invite only the one approved user email
 
+### Outside activities
+
+Apply `202610230001_outside_activities.sql` to enable outside activity logging. It creates a separate `outside_activities` table with per-user row-level security. On Today, choose **Log outside activity** to open a separate page for walking, biking, or a custom activity with its local calendar date and distance in miles (up to two decimal places). You choose which walks are worth logging. In History, **Edit** opens the activity form inline, with removal available while editing.
+
+Outside activity cards and calendar days use white text on blue; days with both a gym workout and an outside activity keep the yellow gym background and add a blue O badge. Outside activities never contribute to gym visit goals, monthly gym averages, exercise recommendations, or the next workout rotation.
+
 ## Cloudflare Pages setup
 
 Use Cloudflare Pages GitHub integration, not Direct Upload.

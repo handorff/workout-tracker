@@ -11,7 +11,8 @@ import { StatusView } from "../components/StatusView";
 
 export function TodayPage() {
   const navigate = useNavigate();
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [detailsTemplateId, setDetailsTemplateId] = useState<string | null>(null);
+  const [startingTemplateId, setStartingTemplateId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -36,9 +37,7 @@ export function TodayPage() {
   }
 
   const { inProgressSession, nextTemplate, templates, recommendationsByTemplate } = todayQuery.data;
-  const selectedTemplate = inProgressSession?.template
-    ?? templates.find((template) => template.id === selectedTemplateId)
-    ?? nextTemplate;
+  const selectedTemplate = templates.find((template) => template.id === detailsTemplateId) ?? nextTemplate;
   const exerciseRecommendations = recommendationsByTemplate[selectedTemplate.id] ?? {};
   const exercises = sortTemplateExercises(selectedTemplate);
   const activeRecommendations = new Map(
@@ -52,17 +51,21 @@ export function TodayPage() {
     ]),
   );
 
-  async function handleStart() {
+  async function handleStart(templateId: string) {
+    if (startWorkout.isPending) return;
     setStartError(null);
     if (inProgressSession) {
       navigate(`/workout/${inProgressSession.id}`);
       return;
     }
+    setStartingTemplateId(templateId);
     try {
-      const session = await startWorkout.mutateAsync(selectedTemplate.id);
+      const session = await startWorkout.mutateAsync(templateId);
       navigate(`/workout/${session.id}`);
     } catch {
       setStartError("This workout could not be started. Please try again.");
+    } finally {
+      setStartingTemplateId(null);
     }
   }
 
@@ -72,7 +75,7 @@ export function TodayPage() {
   }
 
   return (
-    <main className="page-shell gap-4 pb-28">
+    <main className="page-shell gap-4">
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <h1 className="page-title">Today</h1>
@@ -89,38 +92,33 @@ export function TodayPage() {
 
       <GymGoalCard />
 
-      <fieldset className="space-y-3" disabled={Boolean(inProgressSession) || startWorkout.isPending}>
-        <legend className="section-label mb-3">Choose workout</legend>
-        <div className="flex flex-wrap gap-2">
-          {templates.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              aria-pressed={selectedTemplate.id === template.id}
-              className={`secondary-button h-11 flex-1 px-4 text-sm disabled:cursor-not-allowed ${selectedTemplate.id === template.id ? "border-ink ring-1 ring-ink" : ""}`}
-              onClick={() => { setSelectedTemplateId(template.id); setStartError(null); }}
-            >
-              {template.name}
-            </button>
-          ))}
-        </div>
-        {inProgressSession && <p className="text-sm leading-6">Finish your current workout before choosing another.</p>}
-      </fieldset>
-
-      <section className="card space-y-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="section-label">
-              {inProgressSession ? "Resume workout" : "Next workout"}
-            </p>
-            <h2 className="font-display text-3xl font-bold text-ink">
-              {selectedTemplate.name}
-            </h2>
-          </div>
-          <span className="shrink-0 rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink">
-            {exercises.length} exercises
-          </span>
-        </div>
+      <section className="space-y-3" aria-label="Workouts">
+        {templates.map((template) => {
+          const isActive = inProgressSession?.workoutTemplateId === template.id;
+          const isNext = !inProgressSession && template.id === nextTemplate.id;
+          const isStarting = startWorkout.isPending && startingTemplateId === template.id;
+          return <div key={template.id} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <button type="button"
+                className={`primary-button flex-1 justify-between gap-3 ${isNext || isActive ? "" : "border-line bg-white"}`}
+                disabled={startWorkout.isPending || Boolean(inProgressSession && !isActive)}
+                aria-label={`${isActive ? "Resume" : "Start"} ${template.name}`}
+                aria-describedby={isNext ? `next-${template.id}` : undefined}
+                onClick={() => handleStart(template.id)}>
+                <span>{isStarting ? "Starting..." : `${isActive ? "Resume" : "Start"} ${template.name}`}</span>
+                {isNext && <span id={`next-${template.id}`} className="inline-flex items-center">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m9 5 7 7-7 7M4 12h12" /></svg>
+                  <span className="sr-only">Next workout</span>
+                </span>}
+              </button>
+              <button type="button" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100"
+                aria-label={`${detailsTemplateId === template.id ? "Hide" : "View"} ${template.name} details`}
+                aria-expanded={detailsTemplateId === template.id} aria-controls={`workout-details-${template.id}`}
+                onClick={() => setDetailsTemplateId(detailsTemplateId === template.id ? null : template.id)}>
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v1" /></svg>
+              </button>
+            </div>
+      {detailsTemplateId === template.id && <div id={`workout-details-${template.id}`} className="space-y-4 border-t border-line pt-4">
         {(selectedTemplate.warmupNotes) && (
           <div>
             <p className="section-label">Warm-up</p>
@@ -129,11 +127,9 @@ export function TodayPage() {
             </p>
           </div>
         )}
-      </section>
-
-      <section className="card space-y-4 p-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl font-bold text-ink">Exercises</h2>
+          <h3 className="text-lg font-bold text-ink">Exercises</h3>
+          <span className="text-sm">{exercises.length} exercises</span>
         </div>
         <div className="space-y-3">
           {exercises.map((item) => (
@@ -186,23 +182,15 @@ export function TodayPage() {
             })()
           ))}
         </div>
-      </section>
-
-      {startError && <p role="alert" className="text-sm font-semibold">{startError}</p>}
-
-      <div className="workout-action-bar">
-      <button
-        className="primary-button w-full shadow-lg pointer-events-auto"
-        disabled={startWorkout.isPending}
-        onClick={handleStart}
-      >
-        {startWorkout.isPending
-          ? "Starting..."
-          : inProgressSession
-            ? `Resume ${inProgressSession.template.name}`
-            : `Start ${selectedTemplate.name}`}
-      </button>
+      </div>}
+          </div>;
+        })}
+        {inProgressSession && <p className="text-sm leading-6">Finish your current workout before starting another.</p>}
+        {startError && <p role="alert" className="text-sm font-semibold">{startError}</p>}
+      <div className="border-t border-line pt-3">
+        <Link className="secondary-button w-full" to="/outside-activity/new">Log outside activity</Link>
       </div>
+      </section>
     </main>
   );
 }

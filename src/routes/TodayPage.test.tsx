@@ -79,8 +79,8 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   const base = buildSession();
-  const templates = ["A", "B"].map((name, index) => ({
-    ...base.template, id: `template-${name}`, name: `Workout ${name}`, warmupNotes: `Warm-up ${name}`,
+  const templates = ["A", "B", "Cardio"].map((name, index) => ({
+    ...base.template, id: `template-${name}`, name: name === "Cardio" ? name : `Workout ${name}`, warmupNotes: `Warm-up ${name}`,
     exercises: [{
       id: `slot-${name}`, workoutTemplateId: `template-${name}`, exerciseId: `exercise-${name}`, orderIndex: 1,
       targetSets: 3, targetRepMin: 6, targetRepMax: 8, targetSecondsMin: null, targetSecondsMax: null,
@@ -99,39 +99,59 @@ beforeEach(() => {
   mocks.start.mockResolvedValue({ id: "new-session" });
 });
 
-describe("Today workout selection", () => {
-  it("defaults to the suggested workout and previews the selected routine", async () => {
-    const user = userEvent.setup();
+describe("Today workout actions", () => {
+  it("marks the next workout and keeps outside activity secondary", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: "Workout A" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Workout B" }));
-    expect(screen.getByText("Warm-up B")).toBeVisible();
-    expect(screen.getByText("Cable Row")).toBeVisible();
-    expect(screen.getByText("Suggested: 75 lb")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start Workout A" })).toHaveAccessibleDescription("Next workout");
+    expect(screen.getByRole("button", { name: "Start Workout A" })).toHaveClass("primary-button");
+    expect(screen.getByRole("button", { name: "Start Workout B" })).not.toHaveAccessibleDescription("Next workout");
+    expect(screen.getByRole("link", { name: "Log outside activity" })).toHaveAttribute("href", "/outside-activity/new");
     expect(screen.queryByText("Goblet Squat")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Start Workout B" }));
-    expect(mocks.start).toHaveBeenCalledWith("template-B");
+    expect(screen.queryByText("Warm-up A")).not.toBeInTheDocument();
+  });
+
+  it.each([["Workout A", "template-A"], ["Workout B", "template-B"], ["Cardio", "template-Cardio"]])("starts %s with one click", async (name, id) => {
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: `Start ${name}` }));
+    expect(mocks.start).toHaveBeenCalledExactlyOnceWith(id);
     expect(await screen.findByRole("heading", { name: "Workout checklist" })).toBeVisible();
   });
 
-  it("resumes an active workout without creating or replacing it", async () => {
+  it("previews each workout without starting it and toggles details closed", async () => {
     const user = userEvent.setup();
-    data.inProgressSession = { ...buildSession(), status: "in_progress", template: data.templates[1] };
     renderPage();
-    expect(screen.getByRole("button", { name: "Workout A" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Workout B" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Resume Workout B" }));
+    await user.click(screen.getByRole("button", { name: "View Workout B details" }));
+    expect(screen.getByText("Warm-up B")).toBeVisible();
+    expect(screen.getByText("Cable Row")).toBeVisible();
+    expect(screen.getByText("Suggested: 75 lb")).toBeVisible();
+    expect(mocks.start).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "View Workout A details" }));
+    expect(screen.getByText("Goblet Squat")).toBeVisible();
+    expect(screen.queryByText("Warm-up B")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide Workout A details" })).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: "Hide Workout A details" }));
+    expect(screen.queryByText("Goblet Squat")).not.toBeInTheDocument();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it("resumes an active workout and disables starting other routines", async () => {
+    data.inProgressSession = { ...buildSession(), workoutTemplateId: data.templates[1].id, status: "in_progress", template: data.templates[1] };
+    renderPage();
+    expect(screen.getByRole("button", { name: "Start Workout A" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Cardio" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "View Workout A details" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Resume Workout B" }));
     expect(mocks.start).not.toHaveBeenCalled();
     expect(await screen.findByRole("heading", { name: "Workout checklist" })).toBeVisible();
   });
 
-  it("keeps the selection available to retry if starting fails", async () => {
-    const user = userEvent.setup();
-    mocks.start.mockRejectedValue(new Error("offline"));
+  it("allows retrying the same workout after a failure", async () => {
+    mocks.start.mockRejectedValueOnce(new Error("offline"));
     renderPage();
-    await user.click(screen.getByRole("button", { name: "Workout B" }));
-    await user.click(screen.getByRole("button", { name: "Start Workout B" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Workout B" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be started");
-    expect(screen.getByRole("button", { name: "Start Workout B" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Start Workout B" }));
+    expect(mocks.start).toHaveBeenNthCalledWith(2, "template-B");
+    expect(await screen.findByRole("heading", { name: "Workout checklist" })).toBeVisible();
   });
 });

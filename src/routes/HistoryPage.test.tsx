@@ -10,6 +10,12 @@ const mockUpdateSet = vi.fn();
 const mockUseAuth = vi.fn();
 const mockUseCompletedWorkouts = vi.fn();
 const mockUseDeleteWorkoutSession = vi.fn();
+const mockActivities = vi.hoisted(() => ({ query: vi.fn(), remove: vi.fn(), save: vi.fn() }));
+vi.mock("../features/activities/hooks", () => ({
+  useOutsideActivities: () => mockActivities.query(),
+  useDeleteOutsideActivity: () => ({ mutateAsync: mockActivities.remove, isPending: false }),
+  useSaveOutsideActivity: () => ({ mutateAsync: mockActivities.save, isPending: false }),
+}));
 
 vi.mock("../features/auth/auth-context", () => ({
   useAuth: () => mockUseAuth(),
@@ -92,6 +98,9 @@ describe("HistoryPage", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 3, 15, 12));
     vi.restoreAllMocks();
+    mockActivities.query.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockActivities.remove.mockReset().mockResolvedValue(undefined);
+    mockActivities.save.mockReset().mockResolvedValue(undefined);
     mockUpdateSet.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReset();
     mockUseCompletedWorkouts.mockReset();
@@ -134,14 +143,100 @@ describe("HistoryPage", () => {
     older.template = { ...older.template, name: "Workout B" };
     mockUseCompletedWorkouts.mockReturnValue({ data: [buildSession(), older] });
     renderPage();
-    expect(screen.getByText("Workout A")).toBeVisible();
-    expect(screen.queryByText("Workout B")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Workout A •/ })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: /Workout B •/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "April 3, 2026: Workout B" }));
-    expect(screen.getByText("Workout B")).toBeVisible();
-    expect(screen.queryByText("Workout A")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Workout B •/ })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: /Workout A •/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "April 4, 2026: No workouts" }));
     expect(screen.getByText("No workouts on this day.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("shows outside activities in blue without counting them as gym visits", async () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    renderPage();
+    expect(screen.getByText("0.5 visits/week so far")).toBeVisible();
+    expect(screen.getByRole("button", { name: "April 10, 2026: Walking (outside)" })).toHaveClass("bg-outside", "text-white");
+    expect(screen.getByRole("heading", { name: "Walking · 2.75 miles" })).toBeVisible();
+    expect(screen.queryByText("Park loop")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows both colors for mixed days and counts only one gym visit", async () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "bike", activity: "Biking", activity_date: "2026-04-05", distance_miles: 5 }] });
+    renderPage();
+    const day = screen.getByRole("button", { name: "April 5, 2026: Workout A, Biking (outside)" });
+    expect(day).toHaveClass("bg-accent");
+    expect(within(day).getByText("O")).toHaveClass("bg-outside");
+    expect(screen.getByText("0.5 visits/week so far")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Biking · 5 miles" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /Workout A •/ })).toBeVisible();
+  });
+
+  it("shows an outside-only month without an empty state or gym visits", () => {
+    mockUseCompletedWorkouts.mockReturnValue({ data: [] });
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    renderPage();
+    expect(screen.getByText("0.0 visits/week so far")).toBeVisible();
+    expect(screen.queryByText("No workouts this month")).not.toBeInTheDocument();
+  });
+
+  it("reports outside activity errors separately while keeping gym history", () => {
+    mockActivities.query.mockReturnValue({ isError: true });
+    renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent("Outside activities could not be loaded");
+    expect(screen.getByRole("heading", { name: /Workout A •/ })).toBeVisible();
+    expect(screen.getByText("0.5 visits/week so far")).toBeVisible();
+  });
+
+  it("offers inline editing without showing activity removal or a redundant label", () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    renderPage();
+    expect(screen.queryByRole("button", { name: "Remove activity" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Outside activity", { exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("edits outside activity miles inline, saves, and closes the editor", async () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("button", { name: "Done" })).toHaveAttribute("aria-expanded", "true");
+    const distance = screen.getByLabelText("Distance (miles)");
+    expect(distance).toHaveValue(2.75);
+    await user.clear(distance);
+    await user.type(distance, "3.5");
+    await user.click(screen.getByRole("button", { name: "Save activity" }));
+    expect(mockActivities.save).toHaveBeenCalledWith({ id: "walk", values: { activity: "Walking", activity_date: "2026-04-10", distance_miles: 3.5 } });
+    expect(screen.queryByLabelText("Distance (miles)")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeVisible();
+  });
+
+  it("can cancel or finish inline editing without saving", async () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Remove activity" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByLabelText("Distance (miles)")).not.toBeInTheDocument();
+    expect(mockActivities.save).not.toHaveBeenCalled();
+  });
+
+  it("removes outside activities only from inline editing", async () => {
+    mockActivities.query.mockReturnValue({ data: [{ id: "walk", activity: "Walking", activity_date: "2026-04-10", distance_miles: 2.75 }] });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    const user = userEvent.setup();
+    expect(screen.queryByRole("button", { name: "Remove activity" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Remove activity" }));
+    expect(mockActivities.remove).toHaveBeenCalledWith("walk");
+    expect(screen.queryByLabelText("Distance (miles)")).not.toBeInTheDocument();
   });
 
   it("groups multiple workouts on one local calendar day", () => {
