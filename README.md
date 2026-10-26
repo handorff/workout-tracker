@@ -14,7 +14,7 @@ Single-user workout tracker built with React, Supabase, and Cloudflare Pages.
 
 ## Local development
 
-Use Node.js 22.12 or newer (see `.nvmrc`). Tailwind CSS 4 requires Safari 16.4+, Chrome 111+, or Firefox 128+. Theme tokens live in `src/index.css`, and Tailwind is compiled by the Vite plugin.
+Use Node.js 24.22.1 (see `.nvmrc`); with nvm, run `nvm install` and `nvm use` before installing dependencies. CI reads the same version from `.nvmrc`. Tailwind CSS 4 requires Safari 16.4+, Chrome 111+, or Firefox 128+. Theme tokens live in `src/index.css`, and Tailwind is compiled by the Vite plugin.
 
 1. Copy `.env.example` to `.env`.
 2. Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -58,6 +58,8 @@ Recommended Pages build settings:
 - Build command: `npm run build`
 - Build output directory: `dist`
 - Root directory: `/`
+
+Cloudflare Pages reads the Node.js version from `.nvmrc`. Remove any dashboard `NODE_VERSION` override or set it to `24.22.1` so builds use the same runtime as local development and CI.
 
 Required Cloudflare Pages environment variables:
 
